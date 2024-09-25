@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const showAutoComplete = (result) => {
-    removeAutoComplete();
+    removeAutoComplete(); // Remove any existing autocomplete
     const autoCompleteSpan = document.createElement('span');
     autoCompleteSpan.textContent = result.toString();
     autoCompleteSpan.style.color = '#999';
@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     editor.parentNode.appendChild(autoCompleteSpan);
 
+    // Update last cursor position
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
@@ -138,29 +139,50 @@ document.addEventListener('DOMContentLoaded', () => {
     if (autoCompleteSpan) {
       const result = autoCompleteSpan.textContent;
       const selection = window.getSelection();
-      const range = selection.getRangeAt(0);
-      
-      const resultNode = document.createTextNode(result);
-      range.insertNode(resultNode);
-      range.setStartAfter(resultNode);
-      range.setEndAfter(resultNode);
-      selection.removeAllRanges();
-      selection.addRange(range);
+      if (selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
+        
+        const resultNode = document.createTextNode(result);
+        
+        range.insertNode(resultNode);
+        
+        range.setStartAfter(resultNode);
+        range.setEndAfter(resultNode);
+        selection.removeAllRanges();
+        selection.addRange(range);
 
-      removeAutoComplete();
-      animateInsertion(resultNode);
+        removeAutoComplete();
+        animateInsertion(resultNode);
+      }
     }
   };
 
   const animateInsertion = (node) => {
-    node.style.opacity = '0';
-    node.style.transform = 'translateX(-20px)';
-    node.style.transition = 'opacity 0.3s ease-out, transform 0.3s ease-out';
+    if (!node || node.nodeType !== Node.TEXT_NODE) {
+      console.error('Invalid node for animation');
+      return;
+    }
+
+    const animationSpan = document.createElement('span');
+    node.parentNode.insertBefore(animationSpan, node);
+    animationSpan.appendChild(node);
+
+    animationSpan.style.display = 'inline-block';
+    animationSpan.style.opacity = '0';
+    animationSpan.style.transform = 'translateX(-20px)';
+    animationSpan.style.transition = 'opacity 0.1s ease-out, transform 0.1s ease-out';
     
+    animationSpan.offsetHeight;
+
+    animationSpan.style.opacity = '1';
+    animationSpan.style.transform = 'translateX(0)';
+
     setTimeout(() => {
-      node.style.opacity = '1';
-      node.style.transform = 'translateX(0)';
-    }, 0);
+      if (animationSpan.parentNode) {
+        animationSpan.parentNode.insertBefore(node, animationSpan);
+        animationSpan.remove();
+      }
+    }, 100);
   };
 
   const hasCursorMoved = () => {
