@@ -1,0 +1,198 @@
+I am working on the following notepad-like web app:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>Wro</title>
+
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="editor" contenteditable="true" spellcheck="false"></div>
+  <div id="custom-cursor"></div>
+
+  <script src="/script.js"></script>
+  <script src="https://unpkg.com/mathjs/lib/browser/math.js"></script>
+</body>
+</html>
+```
+
+```css
+@font-face {
+    font-family: "Poly Sans";
+    src: url('fonts/PolySansNeutral.ttf') format('truetype');
+  }
+  
+  @font-face {
+    font-family: "Poly Sans Bulky";
+    src: url('fonts/PolySansBulky.ttf') format('truetype');
+  }
+  
+  @font-face {
+    font-family: "Poly Sans Slim";
+    src: url('fonts/PolySansSlim.ttf') format('truetype');
+  }
+  
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  
+  html, body {
+    height: 100%;
+    font-family: "Poly Sans Slim", Arial, sans-serif;
+    background-color: #f9f9f9;
+    position: relative;
+  }
+  
+  #editor {
+    width: 100%;
+    height: 100%;
+    padding: 20px;
+    outline: none;
+    resize: none;
+    font-size: 1.2em;
+    letter-spacing: 0.05em;
+    white-space: pre-wrap;
+    overflow-y: auto;
+    caret-color: transparent;
+    position: relative;
+  }
+  
+  #editor::selection {
+    background: rgba(0, 0, 255, 0.3);
+  }
+  
+  #custom-cursor {
+    position: absolute;
+    width: 2px;
+    height: 1.2em;
+    background-color: black;
+    pointer-events: none;
+    z-index: 10;
+    -webkit-user-select: none;
+    user-select: none;
+    transition: all 0.1s ease;
+  }
+```
+
+```javascript
+document.addEventListener('DOMContentLoaded', () => {
+  const editor = document.getElementById('editor');
+  const customCursor = document.getElementById('custom-cursor');
+
+  const savedNote = localStorage.getItem('userNote');
+  if (savedNote) {
+    editor.innerText = savedNote;
+  }
+
+  const saveNote = () => {
+    localStorage.setItem('userNote', editor.innerText);
+  };
+
+  let saveTimeout;
+  editor.addEventListener('input', () => {
+    clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveNote, 300);
+    updateCustomCursor();
+    processCurentLine();
+  });
+
+  const getCaretCoordinates = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return { x: 20, y: 20 };
+
+    const range = selection.getRangeAt(0).cloneRange();
+    range.collapse(true);
+
+    const dummy = document.createElement('span');
+    dummy.textContent = '\u200b';
+    range.insertNode(dummy);
+
+    const rect = dummy.getBoundingClientRect();
+    const x = rect.left;
+    const y = rect.top;
+
+    dummy.parentNode.removeChild(dummy);
+
+    return { x, y };
+  };
+
+  const updateCustomCursor = () => {
+    const { x, y } = getCaretCoordinates();
+    const editorRect = editor.getBoundingClientRect();
+
+    const cursorX = x - editorRect.left;
+    let cursorY = y - editorRect.top;
+
+    cursorY += 2;
+
+    const clampedX = Math.max(0, Math.min(cursorX, editor.clientWidth - 2)); // 2px width of cursor
+    const clampedY = Math.max(0, Math.min(cursorY, editor.clientHeight - parseInt(getComputedStyle(editor).fontSize)));
+
+    customCursor.style.left = `${clampedX}px`;
+    customCursor.style.top = `${clampedY}px`;
+  };
+
+  const processCurentLine = () => {
+    const currentLine = getCurrentLine();
+    if (currentLine) {
+      try {
+        const result = math.evaluate(currentLine);
+        if (typeof result === 'number') {
+          console.log('Result:', result);
+        }
+      } catch (error) {
+        return;
+      }
+    }
+  };
+
+  const getCurrentLine = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      const fullText = node.textContent;
+
+      const lines = fullText.split('\n');
+
+      const caretOffset = range.startOffset;
+      let currentLine = '';
+      let currentLineLength = 0;
+
+      for (const line of lines) {
+        currentLineLength += line.length + 1;
+        if (currentLineLength > caretOffset) {
+          currentLine = line;
+          break;
+        }
+      }
+
+      // console.log('Current line:', currentLine.trim());
+      return currentLine.trim();
+    }
+  };
+
+  updateCustomCursor();
+
+  document.addEventListener('selectionchange', () => {
+    setTimeout(updateCustomCursor, 0);
+  });
+
+  window.addEventListener('resize', updateCustomCursor);
+});
+```
+
+As you can see, I currently have an automatic math result printer, but I want to extend this further. I want it to be smarter:
+When a user types "=", I want the script to get the entire word that preceds it (all the characters before it on the same line not seperated by a space). It should then try and calculate it, using `math.evaluate`, and check if the result is a number. If a number result is received, I want it to be shown on the page, right after where my cursor is placed (at the end of the processed line). This should act as a sort of autocomplete, showing it as a grey text. And to add it to the document, users should be able to press TAB. It should then be added right where the cursor is, and be nicely animated flowing from left to right.
+I want you to fully develop and implement this.
