@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const showAutoComplete = (result) => {
-    removeAutoComplete(); // Remove any existing autocomplete
+    removeAutoComplete();
     const autoCompleteSpan = document.createElement('span');
     autoCompleteSpan.textContent = result.toString();
     autoCompleteSpan.style.color = '#999';
@@ -119,7 +119,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     editor.parentNode.appendChild(autoCompleteSpan);
 
-    // Update last cursor position
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
       const range = selection.getRangeAt(0);
@@ -153,6 +152,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         removeAutoComplete();
         animateInsertion(resultNode);
+
+        saveNote();
       }
     }
   };
@@ -169,13 +170,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     animationSpan.style.display = 'inline-block';
     animationSpan.style.opacity = '0';
-    animationSpan.style.transform = 'translateX(-20px)';
+    animationSpan.style.transform = 'translateY(-20px)';
     animationSpan.style.transition = 'opacity 0.1s ease-out, transform 0.1s ease-out';
     
     animationSpan.offsetHeight;
 
     animationSpan.style.opacity = '1';
-    animationSpan.style.transform = 'translateX(0)';
+    animationSpan.style.transform = 'translateY(0)';
 
     setTimeout(() => {
       if (animationSpan.parentNode) {
