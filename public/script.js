@@ -1,14 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
   const editor = document.getElementById('editor');
   const customCursor = document.getElementById('custom-cursor');
+  const boldButton = document.getElementById('boldButton');
+  const italicButton = document.getElementById('italicButton');
+  const underlineButton = document.getElementById('underlineButton');
+  const toolbar = document.getElementById('toolbar');
+  const editorContainer = document.getElementById('editor-container');
+
+  let isBoldActive = false;
+  let isItalicActive = false;
+  let isUnderlineActive = false;
 
   const savedNote = localStorage.getItem('userNote');
   if (savedNote) {
-    editor.innerText = savedNote;
+    editor.innerHTML = savedNote;
   }
 
   const saveNote = () => {
-    localStorage.setItem('userNote', editor.innerText);
+    localStorage.setItem('userNote', editor.innerHTML);
   };
 
   let saveTimeout;
@@ -21,7 +30,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.inputType === 'insertText' && event.data === '=') {
       processEquation();
     }
+    if (isBoldActive || isItalicActive || isUnderlineActive) {
+      applyFormattingToNewText(event);
+    }
   });
+
+  const applyFormattingToNewText = (event) => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+
+    if (event.inputType === 'insertText') {
+      let parent = node.parentNode;
+
+      let formattedNode = node;
+
+      if (isBoldActive && (!parent.classList || !parent.classList.contains('bold'))) {
+        const boldSpan = document.createElement('span');
+        boldSpan.classList.add('bold');
+        parent.insertBefore(boldSpan, node);
+        boldSpan.appendChild(node);
+        formattedNode = boldSpan;
+      }
+
+      if (isItalicActive) {
+        const italicElement = document.createElement('i');
+        formattedNode.parentNode.insertBefore(italicElement, formattedNode);
+        italicElement.appendChild(formattedNode);
+        formattedNode = italicElement;
+      }
+
+      if (isUnderlineActive) {
+        const underlineElement = document.createElement('u');
+        formattedNode.parentNode.insertBefore(underlineElement, formattedNode);
+        underlineElement.appendChild(formattedNode);
+        formattedNode = underlineElement;
+      }
+    }
+  };
 
   const getCaretCoordinates = () => {
     const selection = window.getSelection();
@@ -45,10 +93,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const updateCustomCursor = () => {
     const { x, y } = getCaretCoordinates();
-    const editorRect = editor.getBoundingClientRect();
+    const containerRect = editorContainer.getBoundingClientRect();
 
-    const cursorX = x - editorRect.left;
-    let cursorY = y - editorRect.top;
+    const cursorX = x - containerRect.left;
+    let cursorY = y - containerRect.top;
 
     cursorY += 2;
 
@@ -197,10 +245,131 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   };
 
+  const toggleBold = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        applyBoldToSelection(range);
+      } else {
+        isBoldActive = !isBoldActive;
+        updateBoldIndicator();
+      }
+    }
+  };
+
+  const applyBoldToSelection = (range) => {
+    const span = document.createElement('span');
+    span.classList.add('bold');
+    try {
+      span.appendChild(range.extractContents());
+    } catch (e) {
+      console.error('Error applying bold:', e);
+      return;
+    }
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    saveNote();
+  };
+
+  const toggleItalic = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        applyItalicToSelection(range);
+      } else {
+        isItalicActive = !isItalicActive;
+        updateItalicIndicator();
+      }
+    }
+  };
+
+  const applyItalicToSelection = (range) => {
+    const italicElement = document.createElement('i');
+    try {
+      italicElement.appendChild(range.extractContents());
+    } catch (e) {
+      console.error('Error applying italic:', e);
+      return;
+    }
+    range.insertNode(italicElement);
+    range.setStartAfter(italicElement);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    saveNote();
+  };
+
+  const toggleUnderline = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        applyUnderlineToSelection(range);
+      } else {
+        isUnderlineActive = !isUnderlineActive;
+        updateUnderlineIndicator();
+      }
+    }
+  };
+
+  const applyUnderlineToSelection = (range) => {
+    const underlineElement = document.createElement('u');
+    try {
+      underlineElement.appendChild(range.extractContents());
+    } catch (e) {
+      console.error('Error applying underline:', e);
+      return;
+    }
+    range.insertNode(underlineElement);
+    range.setStartAfter(underlineElement);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    saveNote();
+  };
+
+  const updateBoldIndicator = () => {
+    if (isBoldActive) {
+      boldButton.classList.add('active');
+    } else {
+      boldButton.classList.remove('active');
+    }
+  };
+
+  const updateItalicIndicator = () => {
+    if (isItalicActive) {
+      italicButton.classList.add('active');
+    } else {
+      italicButton.classList.remove('active');
+    }
+  };
+
+  const updateUnderlineIndicator = () => {
+    if (isUnderlineActive) {
+      underlineButton.classList.add('active');
+    } else {
+      underlineButton.classList.remove('active');
+    }
+  };
+
   editor.addEventListener('keydown', (event) => {
     if (event.key === 'Tab') {
       event.preventDefault();
       insertAutoComplete();
+    } else if (event.ctrlKey && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      toggleBold();
+    } else if (event.ctrlKey && event.key.toLowerCase() === 'i') {
+      event.preventDefault();
+      toggleItalic();
+    } else if (event.ctrlKey && event.key.toLowerCase() === 'u') {
+      event.preventDefault();
+      toggleUnderline();
     }
   });
 
@@ -208,6 +377,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasCursorMoved()) {
       removeAutoComplete();
     }
+  });
+
+  boldButton.addEventListener('click', () => {
+    toggleBold();
+    editor.focus();
+  });
+
+  italicButton.addEventListener('click', () => {
+    toggleItalic();
+    editor.focus();
+  });
+
+  underlineButton.addEventListener('click', () => {
+    toggleUnderline();
+    editor.focus();
   });
 
   updateCustomCursor();
@@ -223,8 +407,40 @@ document.addEventListener('DOMContentLoaded', () => {
         const range = selection.getRangeAt(0);
         lastCursorPosition = { node: range.startContainer, offset: range.startOffset };
       }
+      checkFormattingState();
     }, 0);
   });
+
+  const checkFormattingState = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+
+    const node = selection.anchorNode;
+    if (node) {
+      let parentElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+
+      if (parentElement && parentElement.closest('.bold')) {
+        isBoldActive = true;
+      } else {
+        isBoldActive = false;
+      }
+      updateBoldIndicator();
+
+      if (parentElement && parentElement.closest('i')) {
+        isItalicActive = true;
+      } else {
+        isItalicActive = false;
+      }
+      updateItalicIndicator();
+
+      if (parentElement && parentElement.closest('u')) {
+        isUnderlineActive = true;
+      } else {
+        isUnderlineActive = false;
+      }
+      updateUnderlineIndicator();
+    }
+  };
 
   window.addEventListener('resize', updateCustomCursor);
 });

@@ -16,14 +16,22 @@ public\index.html
 </head>
 
 <body>
-  <div id="editor" contenteditable="true" spellcheck="false"></div>
-  <div id="custom-cursor"></div>
+  <div id="toolbar">
+    <button id="boldButton" class="toolbar-button">B</button>
+    <button id="italicButton" class="toolbar-button"><i>I</i></button>
+    <button id="underlineButton" class="toolbar-button"><u>U</u></button>
+  </div>
+  <div id="editor-container">
+    <div id="editor" contenteditable="true" spellcheck="false"></div>
+    <div id="custom-cursor"></div>
+  </div>
 
   <script src="/script.js"></script>
   <script src="https://unpkg.com/mathjs/lib/browser/math.js"></script>
 </body>
 
 </html>
+
 ```
 
 public\script.js
@@ -31,14 +39,23 @@ public\script.js
 document.addEventListener('DOMContentLoaded', () => {
   const editor = document.getElementById('editor');
   const customCursor = document.getElementById('custom-cursor');
+  const boldButton = document.getElementById('boldButton');
+  const italicButton = document.getElementById('italicButton');
+  const underlineButton = document.getElementById('underlineButton');
+  const toolbar = document.getElementById('toolbar');
+  const editorContainer = document.getElementById('editor-container');
+
+  let isBoldActive = false;
+  let isItalicActive = false;
+  let isUnderlineActive = false;
 
   const savedNote = localStorage.getItem('userNote');
   if (savedNote) {
-    editor.innerText = savedNote;
+    editor.innerHTML = savedNote;
   }
 
   const saveNote = () => {
-    localStorage.setItem('userNote', editor.innerText);
+    localStorage.setItem('userNote', editor.innerHTML);
   };
 
   let saveTimeout;
@@ -51,7 +68,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.inputType === 'insertText' && event.data === '=') {
       processEquation();
     }
+    if (isBoldActive || isItalicActive || isUnderlineActive) {
+      applyFormattingToNewText(event);
+    }
   });
+
+  const applyFormattingToNewText = (event) => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    const node = range.startContainer;
+
+    if (event.inputType === 'insertText') {
+      let parent = node.parentNode;
+
+      let formattedNode = node;
+
+      if (isBoldActive && (!parent.classList || !parent.classList.contains('bold'))) {
+        const boldSpan = document.createElement('span');
+        boldSpan.classList.add('bold');
+        parent.insertBefore(boldSpan, node);
+        boldSpan.appendChild(node);
+        formattedNode = boldSpan;
+      }
+
+      if (isItalicActive) {
+        const italicElement = document.createElement('i');
+        formattedNode.parentNode.insertBefore(italicElement, formattedNode);
+        italicElement.appendChild(formattedNode);
+        formattedNode = italicElement;
+      }
+
+      if (isUnderlineActive) {
+        const underlineElement = document.createElement('u');
+        formattedNode.parentNode.insertBefore(underlineElement, formattedNode);
+        underlineElement.appendChild(formattedNode);
+        formattedNode = underlineElement;
+      }
+    }
+  };
 
   const getCaretCoordinates = () => {
     const selection = window.getSelection();
@@ -75,10 +131,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const updateCustomCursor = () => {
     const { x, y } = getCaretCoordinates();
-    const editorRect = editor.getBoundingClientRect();
+    const containerRect = editorContainer.getBoundingClientRect();
 
-    const cursorX = x - editorRect.left;
-    let cursorY = y - editorRect.top;
+    const cursorX = x - containerRect.left;
+    let cursorY = y - containerRect.top;
 
     cursorY += 2;
 
@@ -227,10 +283,131 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   };
 
+  const toggleBold = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        applyBoldToSelection(range);
+      } else {
+        isBoldActive = !isBoldActive;
+        updateBoldIndicator();
+      }
+    }
+  };
+
+  const applyBoldToSelection = (range) => {
+    const span = document.createElement('span');
+    span.classList.add('bold');
+    try {
+      span.appendChild(range.extractContents());
+    } catch (e) {
+      console.error('Error applying bold:', e);
+      return;
+    }
+    range.insertNode(span);
+    range.setStartAfter(span);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    saveNote();
+  };
+
+  const toggleItalic = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        applyItalicToSelection(range);
+      } else {
+        isItalicActive = !isItalicActive;
+        updateItalicIndicator();
+      }
+    }
+  };
+
+  const applyItalicToSelection = (range) => {
+    const italicElement = document.createElement('i');
+    try {
+      italicElement.appendChild(range.extractContents());
+    } catch (e) {
+      console.error('Error applying italic:', e);
+      return;
+    }
+    range.insertNode(italicElement);
+    range.setStartAfter(italicElement);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    saveNote();
+  };
+
+  const toggleUnderline = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      if (!range.collapsed) {
+        applyUnderlineToSelection(range);
+      } else {
+        isUnderlineActive = !isUnderlineActive;
+        updateUnderlineIndicator();
+      }
+    }
+  };
+
+  const applyUnderlineToSelection = (range) => {
+    const underlineElement = document.createElement('u');
+    try {
+      underlineElement.appendChild(range.extractContents());
+    } catch (e) {
+      console.error('Error applying underline:', e);
+      return;
+    }
+    range.insertNode(underlineElement);
+    range.setStartAfter(underlineElement);
+    range.collapse(true);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+    saveNote();
+  };
+
+  const updateBoldIndicator = () => {
+    if (isBoldActive) {
+      boldButton.classList.add('active');
+    } else {
+      boldButton.classList.remove('active');
+    }
+  };
+
+  const updateItalicIndicator = () => {
+    if (isItalicActive) {
+      italicButton.classList.add('active');
+    } else {
+      italicButton.classList.remove('active');
+    }
+  };
+
+  const updateUnderlineIndicator = () => {
+    if (isUnderlineActive) {
+      underlineButton.classList.add('active');
+    } else {
+      underlineButton.classList.remove('active');
+    }
+  };
+
   editor.addEventListener('keydown', (event) => {
     if (event.key === 'Tab') {
       event.preventDefault();
       insertAutoComplete();
+    } else if (event.ctrlKey && event.key.toLowerCase() === 'b') {
+      event.preventDefault();
+      toggleBold();
+    } else if (event.ctrlKey && event.key.toLowerCase() === 'i') {
+      event.preventDefault();
+      toggleItalic();
+    } else if (event.ctrlKey && event.key.toLowerCase() === 'u') {
+      event.preventDefault();
+      toggleUnderline();
     }
   });
 
@@ -238,6 +415,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (hasCursorMoved()) {
       removeAutoComplete();
     }
+  });
+
+  boldButton.addEventListener('click', () => {
+    toggleBold();
+    editor.focus();
+  });
+
+  italicButton.addEventListener('click', () => {
+    toggleItalic();
+    editor.focus();
+  });
+
+  underlineButton.addEventListener('click', () => {
+    toggleUnderline();
+    editor.focus();
   });
 
   updateCustomCursor();
@@ -253,8 +445,40 @@ document.addEventListener('DOMContentLoaded', () => {
         const range = selection.getRangeAt(0);
         lastCursorPosition = { node: range.startContainer, offset: range.startOffset };
       }
+      checkFormattingState();
     }, 0);
   });
+
+  const checkFormattingState = () => {
+    const selection = window.getSelection();
+    if (selection.rangeCount === 0) return;
+
+    const node = selection.anchorNode;
+    if (node) {
+      let parentElement = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
+
+      if (parentElement && parentElement.closest('.bold')) {
+        isBoldActive = true;
+      } else {
+        isBoldActive = false;
+      }
+      updateBoldIndicator();
+
+      if (parentElement && parentElement.closest('i')) {
+        isItalicActive = true;
+      } else {
+        isItalicActive = false;
+      }
+      updateItalicIndicator();
+
+      if (parentElement && parentElement.closest('u')) {
+        isUnderlineActive = true;
+      } else {
+        isUnderlineActive = false;
+      }
+      updateUnderlineIndicator();
+    }
+  };
 
   window.addEventListener('resize', updateCustomCursor);
 });
@@ -291,6 +515,32 @@ body {
   position: relative;
 }
 
+#toolbar {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  background-color: #f1f1f1;
+}
+
+.toolbar-button {
+  background: none;
+  border: none;
+  font-size: 1em;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.toolbar-button.active {
+  font-weight: bold;
+}
+
+#editor-container {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 60px);
+  overflow: hidden;
+}
+
 #editor {
   width: 100%;
   height: 100%;
@@ -302,7 +552,6 @@ body {
   white-space: pre-wrap;
   overflow-y: auto;
   caret-color: transparent;
-  position: relative;
 }
 
 #autoComplete {
@@ -325,6 +574,848 @@ body {
   user-select: none;
   transition: all 0.1s ease;
 }
+
+.bold {
+  font-family: "Poly Sans Bulky", Arial, sans-serif;
+}
+
+```
+
+public\typo.js
+```javascript
+/* globals chrome: false */
+/* globals __dirname: false */
+/* globals require: false */
+/* globals Buffer: false */
+/* globals module: false */
+/**
+ * Typo is a JavaScript implementation of a spellchecker using hunspell-style
+ * dictionaries.
+ */
+var Typo;
+(function () {
+    "use strict";
+    /**
+     * Typo constructor.
+     *
+     * @param {string} [dictionary] The locale code of the dictionary being used. e.g.,
+     *                              "en_US". This is only used to auto-load dictionaries.
+     * @param {string} [affData]    The data from the dictionary's .aff file. If omitted
+     *                              and Typo.js is being used in a Chrome extension, the .aff
+     *                              file will be loaded automatically from
+     *                              lib/typo/dictionaries/[dictionary]/[dictionary].aff
+     *                              In other environments, it will be loaded from
+     *                              [settings.dictionaryPath]/dictionaries/[dictionary]/[dictionary].aff
+     * @param {string} [wordsData]  The data from the dictionary's .dic file. If omitted
+     *                              and Typo.js is being used in a Chrome extension, the .dic
+     *                              file will be loaded automatically from
+     *                              lib/typo/dictionaries/[dictionary]/[dictionary].dic
+     *                              In other environments, it will be loaded from
+     *                              [settings.dictionaryPath]/dictionaries/[dictionary]/[dictionary].dic
+     * @param {Object} [settings]   Constructor settings. Available properties are:
+     *                              {string} [dictionaryPath]: path to load dictionary from in non-chrome
+     *                              environment.
+     *                              {Object} [flags]: flag information.
+     *                              {boolean} [asyncLoad]: If true, affData and wordsData will be loaded
+     *                              asynchronously.
+     *                              {Function} [loadedCallback]: Called when both affData and wordsData
+     *                              have been loaded. Only used if asyncLoad is set to true. The parameter
+     *                              is the instantiated Typo object.
+     *
+     * @returns {Typo} A Typo object.
+     */
+    Typo = function (dictionary, affData, wordsData, settings) {
+        settings = settings || {};
+        this.dictionary = null;
+        this.rules = {};
+        this.dictionaryTable = {};
+        this.compoundRules = [];
+        this.compoundRuleCodes = {};
+        this.replacementTable = [];
+        this.flags = settings.flags || {};
+        this.memoized = {};
+        this.loaded = false;
+        var self = this;
+        var path;
+        // Loop-control variables.
+        var i, j, _len, _jlen;
+        if (dictionary) {
+            self.dictionary = dictionary;
+            // If the data is preloaded, just setup the Typo object.
+            if (affData && wordsData) {
+                setup();
+            }
+            // Loading data for Chrome extentions.
+            else if (typeof window !== 'undefined' && 'chrome' in window && 'extension' in window.chrome && 'getURL' in window.chrome.extension) {
+                if (settings.dictionaryPath) {
+                    path = settings.dictionaryPath;
+                }
+                else {
+                    path = "typo/dictionaries";
+                }
+                if (!affData)
+                    readDataFile(chrome.extension.getURL(path + "/" + dictionary + "/" + dictionary + ".aff"), setAffData);
+                if (!wordsData)
+                    readDataFile(chrome.extension.getURL(path + "/" + dictionary + "/" + dictionary + ".dic"), setWordsData);
+            }
+            else {
+                if (settings.dictionaryPath) {
+                    path = settings.dictionaryPath;
+                }
+                else if (typeof __dirname !== 'undefined') {
+                    path = __dirname + '/dictionaries';
+                }
+                else {
+                    path = './dictionaries';
+                }
+                if (!affData)
+                    readDataFile(path + "/" + dictionary + "/" + dictionary + ".aff", setAffData);
+                if (!wordsData)
+                    readDataFile(path + "/" + dictionary + "/" + dictionary + ".dic", setWordsData);
+            }
+        }
+        function readDataFile(url, setFunc) {
+            var response = self._readFile(url, null, settings === null || settings === void 0 ? void 0 : settings.asyncLoad);
+            if (settings === null || settings === void 0 ? void 0 : settings.asyncLoad) {
+                response.then(function (data) {
+                    setFunc(data);
+                });
+            }
+            else {
+                setFunc(response);
+            }
+        }
+        function setAffData(data) {
+            affData = data;
+            if (wordsData) {
+                setup();
+            }
+        }
+        function setWordsData(data) {
+            wordsData = data;
+            if (affData) {
+                setup();
+            }
+        }
+        function setup() {
+            self.rules = self._parseAFF(affData);
+            // Save the rule codes that are used in compound rules.
+            self.compoundRuleCodes = {};
+            for (i = 0, _len = self.compoundRules.length; i < _len; i++) {
+                var rule = self.compoundRules[i];
+                for (j = 0, _jlen = rule.length; j < _jlen; j++) {
+                    self.compoundRuleCodes[rule[j]] = [];
+                }
+            }
+            // If we add this ONLYINCOMPOUND flag to self.compoundRuleCodes, then _parseDIC
+            // will do the work of saving the list of words that are compound-only.
+            if ("ONLYINCOMPOUND" in self.flags) {
+                self.compoundRuleCodes[self.flags.ONLYINCOMPOUND] = [];
+            }
+            self.dictionaryTable = self._parseDIC(wordsData);
+            // Get rid of any codes from the compound rule codes that are never used
+            // (or that were special regex characters).  Not especially necessary...
+            for (i in self.compoundRuleCodes) {
+                if (self.compoundRuleCodes[i].length === 0) {
+                    delete self.compoundRuleCodes[i];
+                }
+            }
+            // Build the full regular expressions for each compound rule.
+            // I have a feeling (but no confirmation yet) that this method of
+            // testing for compound words is probably slow.
+            for (i = 0, _len = self.compoundRules.length; i < _len; i++) {
+                var ruleText = self.compoundRules[i];
+                var expressionText = "";
+                for (j = 0, _jlen = ruleText.length; j < _jlen; j++) {
+                    var character = ruleText[j];
+                    if (character in self.compoundRuleCodes) {
+                        expressionText += "(" + self.compoundRuleCodes[character].join("|") + ")";
+                    }
+                    else {
+                        expressionText += character;
+                    }
+                }
+                self.compoundRules[i] = new RegExp(expressionText, "i");
+            }
+            self.loaded = true;
+            if ((settings === null || settings === void 0 ? void 0 : settings.asyncLoad) && (settings === null || settings === void 0 ? void 0 : settings.loadedCallback)) {
+                settings.loadedCallback(self);
+            }
+        }
+        return this;
+    };
+    Typo.prototype = {
+        /**
+         * Loads a Typo instance from a hash of all of the Typo properties.
+         *
+         * @param {object} obj A hash of Typo properties, probably gotten from a JSON.parse(JSON.stringify(typo_instance)).
+         */
+        load: function (obj) {
+            for (var i in obj) {
+                if (obj.hasOwnProperty(i)) {
+                    this[i] = obj[i];
+                }
+            }
+            return this;
+        },
+        /**
+         * Read the contents of a file.
+         *
+         * @param {string} path The path (relative) to the file.
+         * @param {string} [charset="ISO8859-1"] The expected charset of the file
+         * @param {boolean} async If true, the file will be read asynchronously. For node.js this does nothing, all
+         *        files are read synchronously.
+         * @returns {string} The file data if async is false, otherwise a promise object. If running node.js, the data is
+         *          always returned.
+         */
+        _readFile: function (path, charset, async) {
+            var _a;
+            charset = charset || "utf8";
+            if (typeof XMLHttpRequest !== 'undefined') {
+                var req_1 = new XMLHttpRequest();
+                req_1.open("GET", path, !!async);
+                (_a = req_1.overrideMimeType) === null || _a === void 0 ? void 0 : _a.call(req_1, "text/plain; charset=" + charset);
+                if (!!async) {
+                    var promise = new Promise(function (resolve, reject) {
+                        req_1.onload = function () {
+                            if (req_1.status === 200) {
+                                resolve(req_1.responseText);
+                            }
+                            else {
+                                reject(req_1.statusText);
+                            }
+                        };
+                        req_1.onerror = function () {
+                            reject(req_1.statusText);
+                        };
+                    });
+                    req_1.send(null);
+                    return promise;
+                }
+                else {
+                    req_1.send(null);
+                    return req_1.responseText;
+                }
+            }
+            else if (typeof require !== 'undefined') {
+                // Node.js
+                var fs = require("fs");
+                try {
+                    if (fs.existsSync(path)) {
+                        return fs.readFileSync(path, charset);
+                    }
+                    else {
+                        console.log("Path " + path + " does not exist.");
+                    }
+                }
+                catch (e) {
+                    console.log(e);
+                }
+                return '';
+            }
+            return '';
+        },
+        /**
+         * Parse the rules out from a .aff file.
+         *
+         * @param {string} data The contents of the affix file.
+         * @returns object The rules from the file.
+         */
+        _parseAFF: function (data) {
+            var rules = {};
+            var line, subline, numEntries, lineParts;
+            var i, j, _len, _jlen;
+            var lines = data.split(/\r?\n/);
+            for (i = 0, _len = lines.length; i < _len; i++) {
+                // Remove comment lines
+                line = this._removeAffixComments(lines[i]);
+                line = line.trim();
+                if (!line) {
+                    continue;
+                }
+                var definitionParts = line.split(/\s+/);
+                var ruleType = definitionParts[0];
+                if (ruleType === "PFX" || ruleType === "SFX") {
+                    var ruleCode = definitionParts[1];
+                    var combineable = definitionParts[2];
+                    numEntries = parseInt(definitionParts[3], 10);
+                    var entries = [];
+                    for (j = i + 1, _jlen = i + 1 + numEntries; j < _jlen; j++) {
+                        subline = lines[j];
+                        lineParts = subline.split(/\s+/);
+                        var charactersToRemove = lineParts[2];
+                        var additionParts = lineParts[3].split("/");
+                        var charactersToAdd = additionParts[0];
+                        if (charactersToAdd === "0")
+                            charactersToAdd = "";
+                        var continuationClasses = this.parseRuleCodes(additionParts[1]);
+                        var regexToMatch = lineParts[4];
+                        var entry = {
+                            add: charactersToAdd
+                        };
+                        if (continuationClasses.length > 0)
+                            entry.continuationClasses = continuationClasses;
+                        if (regexToMatch !== ".") {
+                            if (ruleType === "SFX") {
+                                entry.match = new RegExp(regexToMatch + "$");
+                            }
+                            else {
+                                entry.match = new RegExp("^" + regexToMatch);
+                            }
+                        }
+                        if (charactersToRemove != "0") {
+                            if (ruleType === "SFX") {
+                                entry.remove = new RegExp(charactersToRemove + "$");
+                            }
+                            else {
+                                entry.remove = charactersToRemove;
+                            }
+                        }
+                        entries.push(entry);
+                    }
+                    rules[ruleCode] = { "type": ruleType, "combineable": (combineable === "Y"), "entries": entries };
+                    i += numEntries;
+                }
+                else if (ruleType === "COMPOUNDRULE") {
+                    numEntries = parseInt(definitionParts[1], 10);
+                    for (j = i + 1, _jlen = i + 1 + numEntries; j < _jlen; j++) {
+                        line = lines[j];
+                        lineParts = line.split(/\s+/);
+                        this.compoundRules.push(lineParts[1]);
+                    }
+                    i += numEntries;
+                }
+                else if (ruleType === "REP") {
+                    lineParts = line.split(/\s+/);
+                    if (lineParts.length === 3) {
+                        this.replacementTable.push([lineParts[1], lineParts[2]]);
+                    }
+                }
+                else {
+                    // ONLYINCOMPOUND
+                    // COMPOUNDMIN
+                    // FLAG
+                    // KEEPCASE
+                    // NEEDAFFIX
+                    this.flags[ruleType] = definitionParts[1];
+                }
+            }
+            return rules;
+        },
+        /**
+         * Removes comments.
+         *
+         * @param {string} data A line from an affix file.
+         * @return {string} The cleaned-up line.
+         */
+        _removeAffixComments: function (line) {
+            // This used to remove any string starting with '#' up to the end of the line,
+            // but some COMPOUNDRULE definitions include '#' as part of the rule.
+            // So, only remove lines that begin with a comment, optionally preceded by whitespace.
+            if (line.match(/^\s*#/)) {
+                return '';
+            }
+            return line;
+        },
+        /**
+         * Parses the words out from the .dic file.
+         *
+         * @param {string} data The data from the dictionary file.
+         * @returns HashMap The lookup table containing all of the words and
+         *                 word forms from the dictionary.
+         */
+        _parseDIC: function (data) {
+            data = this._removeDicComments(data);
+            var lines = data.split(/\r?\n/);
+            var dictionaryTable = {};
+            function addWord(word, rules) {
+                // Some dictionaries will list the same word multiple times with different rule sets.
+                if (!dictionaryTable.hasOwnProperty(word)) {
+                    dictionaryTable[word] = null;
+                }
+                if (rules.length > 0) {
+                    if (dictionaryTable[word] === null) {
+                        dictionaryTable[word] = [];
+                    }
+                    dictionaryTable[word].push(rules);
+                }
+            }
+            // The first line is the number of words in the dictionary.
+            for (var i = 1, _len = lines.length; i < _len; i++) {
+                var line = lines[i];
+                if (!line) {
+                    // Ignore empty lines.
+                    continue;
+                }
+                var parts = line.split("/", 2);
+                var word = parts[0];
+                // Now for each affix rule, generate that form of the word.
+                if (parts.length > 1) {
+                    var ruleCodesArray = this.parseRuleCodes(parts[1]);
+                    // Save the ruleCodes for compound word situations.
+                    if (!("NEEDAFFIX" in this.flags) || ruleCodesArray.indexOf(this.flags.NEEDAFFIX) === -1) {
+                        addWord(word, ruleCodesArray);
+                    }
+                    for (var j = 0, _jlen = ruleCodesArray.length; j < _jlen; j++) {
+                        var code = ruleCodesArray[j];
+                        var rule = this.rules[code];
+                        if (rule) {
+                            var newWords = this._applyRule(word, rule);
+                            for (var ii = 0, _iilen = newWords.length; ii < _iilen; ii++) {
+                                var newWord = newWords[ii];
+                                addWord(newWord, []);
+                                if (rule.combineable) {
+                                    for (var k = j + 1; k < _jlen; k++) {
+                                        var combineCode = ruleCodesArray[k];
+                                        var combineRule = this.rules[combineCode];
+                                        if (combineRule) {
+                                            if (combineRule.combineable && (rule.type != combineRule.type)) {
+                                                var otherNewWords = this._applyRule(newWord, combineRule);
+                                                for (var iii = 0, _iiilen = otherNewWords.length; iii < _iiilen; iii++) {
+                                                    var otherNewWord = otherNewWords[iii];
+                                                    addWord(otherNewWord, []);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (code in this.compoundRuleCodes) {
+                            this.compoundRuleCodes[code].push(word);
+                        }
+                    }
+                }
+                else {
+                    addWord(word.trim(), []);
+                }
+            }
+            return dictionaryTable;
+        },
+        /**
+         * Removes comment lines and then cleans up blank lines and trailing whitespace.
+         *
+         * @param {string} data The data from a .dic file.
+         * @return {string} The cleaned-up data.
+         */
+        _removeDicComments: function (data) {
+            // I can't find any official documentation on it, but at least the de_DE
+            // dictionary uses tab-indented lines as comments.
+            // Remove comments
+            data = data.replace(/^\t.*$/mg, "");
+            return data;
+        },
+        parseRuleCodes: function (textCodes) {
+            if (!textCodes) {
+                return [];
+            }
+            else if (!("FLAG" in this.flags)) {
+                // The flag symbols are single characters
+                return textCodes.split("");
+            }
+            else if (this.flags.FLAG === "long") {
+                // The flag symbols are two characters long.
+                var flags = [];
+                for (var i = 0, _len = textCodes.length; i < _len; i += 2) {
+                    flags.push(textCodes.substr(i, 2));
+                }
+                return flags;
+            }
+            else if (this.flags.FLAG === "num") {
+                // The flag symbols are a CSV list of numbers.
+                return textCodes.split(",");
+            }
+            else if (this.flags.FLAG === "UTF-8") {
+                // The flags are single UTF-8 characters.
+                // @see https://github.com/cfinke/Typo.js/issues/57
+                return Array.from(textCodes);
+            }
+            else {
+                // It's possible that this fallback case will not work for all FLAG values,
+                // but I think it's more likely to work than not returning anything at all.
+                return textCodes.split("");
+            }
+        },
+        /**
+         * Applies an affix rule to a word.
+         *
+         * @param {string} word The base word.
+         * @param {Object} rule The affix rule.
+         * @returns {string[]} The new words generated by the rule.
+         */
+        _applyRule: function (word, rule) {
+            var entries = rule.entries;
+            var newWords = [];
+            for (var i = 0, _len = entries.length; i < _len; i++) {
+                var entry = entries[i];
+                if (!entry.match || word.match(entry.match)) {
+                    var newWord = word;
+                    if (entry.remove) {
+                        newWord = newWord.replace(entry.remove, "");
+                    }
+                    if (rule.type === "SFX") {
+                        newWord = newWord + entry.add;
+                    }
+                    else {
+                        newWord = entry.add + newWord;
+                    }
+                    newWords.push(newWord);
+                    if ("continuationClasses" in entry) {
+                        for (var j = 0, _jlen = entry.continuationClasses.length; j < _jlen; j++) {
+                            var continuationRule = this.rules[entry.continuationClasses[j]];
+                            if (continuationRule) {
+                                newWords = newWords.concat(this._applyRule(newWord, continuationRule));
+                            }
+                            /*
+                            else {
+                                // This shouldn't happen, but it does, at least in the de_DE dictionary.
+                                // I think the author mistakenly supplied lower-case rule codes instead
+                                // of upper-case.
+                            }
+                            */
+                        }
+                    }
+                }
+            }
+            return newWords;
+        },
+        /**
+         * Checks whether a word or a capitalization variant exists in the current dictionary.
+         * The word is trimmed and several variations of capitalizations are checked.
+         * If you want to check a word without any changes made to it, call checkExact()
+         *
+         * @see http://blog.stevenlevithan.com/archives/faster-trim-javascript re:trimming function
+         *
+         * @param {string} aWord The word to check.
+         * @returns {boolean}
+         */
+        check: function (aWord) {
+            if (!this.loaded) {
+                throw "Dictionary not loaded.";
+            }
+            if (!aWord) {
+                return false;
+            }
+            // Remove leading and trailing whitespace
+            var trimmedWord = aWord.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
+            if (this.checkExact(trimmedWord)) {
+                return true;
+            }
+            // The exact word is not in the dictionary.
+            if (trimmedWord.toUpperCase() === trimmedWord) {
+                // The word was supplied in all uppercase.
+                // Check for a capitalized form of the word.
+                var capitalizedWord = trimmedWord[0] + trimmedWord.substring(1).toLowerCase();
+                if (this.hasFlag(capitalizedWord, "KEEPCASE")) {
+                    // Capitalization variants are not allowed for this word.
+                    return false;
+                }
+                if (this.checkExact(capitalizedWord)) {
+                    // The all-caps word is a capitalized word spelled correctly.
+                    return true;
+                }
+                if (this.checkExact(trimmedWord.toLowerCase())) {
+                    // The all-caps is a lowercase word spelled correctly.
+                    return true;
+                }
+            }
+            var uncapitalizedWord = trimmedWord[0].toLowerCase() + trimmedWord.substring(1);
+            if (uncapitalizedWord !== trimmedWord) {
+                if (this.hasFlag(uncapitalizedWord, "KEEPCASE")) {
+                    // Capitalization variants are not allowed for this word.
+                    return false;
+                }
+                // Check for an uncapitalized form
+                if (this.checkExact(uncapitalizedWord)) {
+                    // The word is spelled correctly but with the first letter capitalized.
+                    return true;
+                }
+            }
+            return false;
+        },
+        /**
+         * Checks whether a word exists in the current dictionary.
+         *
+         * @param {string} word The word to check.
+         * @returns {boolean}
+         */
+        checkExact: function (word) {
+            if (!this.loaded) {
+                throw "Dictionary not loaded.";
+            }
+            var ruleCodes = this.dictionaryTable[word];
+            var i, _len;
+            if (typeof ruleCodes === 'undefined') {
+                // Check if this might be a compound word.
+                if ("COMPOUNDMIN" in this.flags && word.length >= this.flags.COMPOUNDMIN) {
+                    for (i = 0, _len = this.compoundRules.length; i < _len; i++) {
+                        if (word.match(this.compoundRules[i])) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            else if (ruleCodes === null) {
+                // a null (but not undefined) value for an entry in the dictionary table
+                // means that the word is in the dictionary but has no flags.
+                return true;
+            }
+            else if (typeof ruleCodes === 'object') { // this.dictionary['hasOwnProperty'] will be a function.
+                for (i = 0, _len = ruleCodes.length; i < _len; i++) {
+                    if (!this.hasFlag(word, "ONLYINCOMPOUND", ruleCodes[i])) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        },
+        /**
+         * Looks up whether a given word is flagged with a given flag.
+         *
+         * @param {string} word The word in question.
+         * @param {string} flag The flag in question.
+         * @return {boolean}
+         */
+        hasFlag: function (word, flag, wordFlags) {
+            if (!this.loaded) {
+                throw "Dictionary not loaded.";
+            }
+            if (flag in this.flags) {
+                if (typeof wordFlags === 'undefined') {
+                    wordFlags = Array.prototype.concat.apply([], this.dictionaryTable[word]);
+                }
+                if (wordFlags && wordFlags.indexOf(this.flags[flag]) !== -1) {
+                    return true;
+                }
+            }
+            return false;
+        },
+        /**
+         * Returns a list of suggestions for a misspelled word.
+         *
+         * @see http://www.norvig.com/spell-correct.html for the basis of this suggestor.
+         * This suggestor is primitive, but it works.
+         *
+         * @param {string} word The misspelling.
+         * @param {number} [limit=5] The maximum number of suggestions to return.
+         * @returns {string[]} The array of suggestions.
+         */
+        alphabet: "",
+        suggest: function (word, limit) {
+            if (!this.loaded) {
+                throw "Dictionary not loaded.";
+            }
+            limit = limit || 5;
+            if (this.memoized.hasOwnProperty(word)) {
+                var memoizedLimit = this.memoized[word]['limit'];
+                // Only return the cached list if it's big enough or if there weren't enough suggestions
+                // to fill a smaller limit.
+                if (limit <= memoizedLimit || this.memoized[word]['suggestions'].length < memoizedLimit) {
+                    return this.memoized[word]['suggestions'].slice(0, limit);
+                }
+            }
+            if (this.check(word))
+                return [];
+            // Check the replacement table.
+            for (var i = 0, _len = this.replacementTable.length; i < _len; i++) {
+                var replacementEntry = this.replacementTable[i];
+                if (word.indexOf(replacementEntry[0]) !== -1) {
+                    var correctedWord = word.replace(replacementEntry[0], replacementEntry[1]);
+                    if (this.check(correctedWord)) {
+                        return [correctedWord];
+                    }
+                }
+            }
+            if (!this.alphabet) {
+                // Use the English alphabet as the default. Problematic, but backwards-compatible.
+                this.alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                // Any characters defined in the affix file as substitutions can go in the alphabet too.
+                // Note that dictionaries do not include the entire alphabet in the TRY flag when it's there.
+                // For example, Q is not in the default English TRY list; that's why having the default
+                // alphabet above is useful.
+                if ('TRY' in this.flags) {
+                    this.alphabet += this.flags['TRY'];
+                }
+                // Plus any additional characters specifically defined as being allowed in words.
+                if ('WORDCHARS' in this.flags) {
+                    this.alphabet += this.flags['WORDCHARS'];
+                }
+                // Remove any duplicates.
+                var alphaArray = this.alphabet.split("");
+                alphaArray.sort();
+                var alphaHash = {};
+                for (var i = 0; i < alphaArray.length; i++) {
+                    alphaHash[alphaArray[i]] = true;
+                }
+                this.alphabet = '';
+                for (var i in alphaHash) {
+                    this.alphabet += i;
+                }
+            }
+            var self = this;
+            /**
+             * Returns a hash keyed by all of the strings that can be made by making a single edit to the word (or words in) `words`
+             * The value of each entry is the number of unique ways that the resulting word can be made.
+             *
+             * @arg HashMap words A hash keyed by words (all with the value `true` to make lookups very quick).
+             * @arg boolean known_only Whether this function should ignore strings that are not in the dictionary.
+             */
+            function edits1(words, known_only) {
+                var rv = {};
+                var i, j, _iilen, _len, _jlen, _edit;
+                var alphabetLength = self.alphabet.length;
+                for (var word_1 in words) {
+                    for (i = 0, _len = word_1.length + 1; i < _len; i++) {
+                        var s = [word_1.substring(0, i), word_1.substring(i)];
+                        // Remove a letter.
+                        if (s[1]) {
+                            _edit = s[0] + s[1].substring(1);
+                            if (!known_only || self.check(_edit)) {
+                                if (!(_edit in rv)) {
+                                    rv[_edit] = 1;
+                                }
+                                else {
+                                    rv[_edit] += 1;
+                                }
+                            }
+                        }
+                        // Transpose letters
+                        // Eliminate transpositions of identical letters
+                        if (s[1].length > 1 && s[1][1] !== s[1][0]) {
+                            _edit = s[0] + s[1][1] + s[1][0] + s[1].substring(2);
+                            if (!known_only || self.check(_edit)) {
+                                if (!(_edit in rv)) {
+                                    rv[_edit] = 1;
+                                }
+                                else {
+                                    rv[_edit] += 1;
+                                }
+                            }
+                        }
+                        if (s[1]) {
+                            // Replace a letter with another letter.
+                            var lettercase = (s[1].substring(0, 1).toUpperCase() === s[1].substring(0, 1)) ? 'uppercase' : 'lowercase';
+                            for (j = 0; j < alphabetLength; j++) {
+                                var replacementLetter = self.alphabet[j];
+                                // Set the case of the replacement letter to the same as the letter being replaced.
+                                if ('uppercase' === lettercase) {
+                                    replacementLetter = replacementLetter.toUpperCase();
+                                }
+                                // Eliminate replacement of a letter by itself
+                                if (replacementLetter != s[1].substring(0, 1)) {
+                                    _edit = s[0] + replacementLetter + s[1].substring(1);
+                                    if (!known_only || self.check(_edit)) {
+                                        if (!(_edit in rv)) {
+                                            rv[_edit] = 1;
+                                        }
+                                        else {
+                                            rv[_edit] += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        if (s[1]) {
+                            // Add a letter between each letter.
+                            for (j = 0; j < alphabetLength; j++) {
+                                // If the letters on each side are capitalized, capitalize the replacement.
+                                var lettercase = (s[0].substring(-1).toUpperCase() === s[0].substring(-1) && s[1].substring(0, 1).toUpperCase() === s[1].substring(0, 1)) ? 'uppercase' : 'lowercase';
+                                var replacementLetter = self.alphabet[j];
+                                if ('uppercase' === lettercase) {
+                                    replacementLetter = replacementLetter.toUpperCase();
+                                }
+                                _edit = s[0] + replacementLetter + s[1];
+                                if (!known_only || self.check(_edit)) {
+                                    if (!(_edit in rv)) {
+                                        rv[_edit] = 1;
+                                    }
+                                    else {
+                                        rv[_edit] += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return rv;
+            }
+            function correct(word) {
+                var _a;
+                // Get the edit-distance-1 and edit-distance-2 forms of this word.
+                var ed1 = edits1((_a = {}, _a[word] = true, _a));
+                var ed2 = edits1(ed1, true);
+                // Sort the edits based on how many different ways they were created.
+                var weighted_corrections = ed2;
+                for (var ed1word in ed1) {
+                    if (!self.check(ed1word)) {
+                        continue;
+                    }
+                    if (ed1word in weighted_corrections) {
+                        weighted_corrections[ed1word] += ed1[ed1word];
+                    }
+                    else {
+                        weighted_corrections[ed1word] = ed1[ed1word];
+                    }
+                }
+                var i, _len;
+                var sorted_corrections = [];
+                for (i in weighted_corrections) {
+                    if (weighted_corrections.hasOwnProperty(i)) {
+                        sorted_corrections.push([i, weighted_corrections[i]]);
+                    }
+                }
+                function sorter(a, b) {
+                    var a_val = a[1];
+                    var b_val = b[1];
+                    if (a_val < b_val) {
+                        return -1;
+                    }
+                    else if (a_val > b_val) {
+                        return 1;
+                    }
+                    // @todo If a and b are equally weighted, add our own weight based on something like the key locations on this language's default keyboard.
+                    return b[0].localeCompare(a[0]);
+                }
+                sorted_corrections.sort(sorter).reverse();
+                var rv = [];
+                var capitalization_scheme = "lowercase";
+                if (word.toUpperCase() === word) {
+                    capitalization_scheme = "uppercase";
+                }
+                else if (word.substr(0, 1).toUpperCase() + word.substr(1).toLowerCase() === word) {
+                    capitalization_scheme = "capitalized";
+                }
+                var working_limit = limit;
+                for (i = 0; i < Math.min(working_limit, sorted_corrections.length); i++) {
+                    if ("uppercase" === capitalization_scheme) {
+                        sorted_corrections[i][0] = sorted_corrections[i][0].toUpperCase();
+                    }
+                    else if ("capitalized" === capitalization_scheme) {
+                        sorted_corrections[i][0] = sorted_corrections[i][0].substr(0, 1).toUpperCase() + sorted_corrections[i][0].substr(1);
+                    }
+                    if (!self.hasFlag(sorted_corrections[i][0], "NOSUGGEST") && rv.indexOf(sorted_corrections[i][0]) === -1) {
+                        rv.push(sorted_corrections[i][0]);
+                    }
+                    else {
+                        // If one of the corrections is not eligible as a suggestion , make sure we still return the right number of suggestions.
+                        working_limit++;
+                    }
+                }
+                return rv;
+            }
+            this.memoized[word] = {
+                'suggestions': correct(word),
+                'limit': limit
+            };
+            return this.memoized[word]['suggestions'];
+        }
+    };
+})();
+// Support for use as a node.js module.
+if (typeof module !== 'undefined') {
+    module.exports = Typo;
+}
+
 ```
 
 server.js
@@ -347,4 +1438,763 @@ app.listen(PORT, () => {
 
 ```
 
-This all works well, but I want to add new features. I want to implement spellcheck to my app. Any time a word is finished (meaning a new space, new line, or simply change of cursor location), the script should run a spell check on it. Find a proper JavaScript package to do so. I only want it to be in English. I want you to fully develop and implement this.
+This all works well, but I want to enhance the appearence of the app. Here is some code from another web app I made. I want the tool bar of this new notepad app to look similarly to the one in my previous work. I want you to fully implement the needed changes:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Depot - Media Storage</title>
+    <link rel="stylesheet" href="/style.css">
+    <link rel=preconnect href="https://cdnjs.cloudflare.com">
+    <link rel=preconnect href="https://www.googleapis.com">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+</head>
+
+<body>
+    <header>
+        <a href="/" id="headerTitleLink">
+            <h1 id="headerTitle"></h1>
+        </a>
+        <nav id="authButtons">
+            <button id="loginBtn" class="auth-btn" style="display: none;">Login</button>
+            <button id="signupBtn" class="auth-btn" style="display: none;">Sign Up</button>
+            <button id="logoutBtn" class="auth-btn" style="display: none;">Sign Out</button>
+        </nav>
+    </header>
+    <main>
+        <section id="welcomeMessage" style="display: none;">
+            <h1 class="welcome-title">Depot</h1>
+            <p class="welcome-subtitle">Free unlimited photo and video storage</p>
+        </section>
+        <section id="userContent" style="display: none;">
+            <section id="toolbar" class="toolbar">
+                <div class="toolbar-left">
+                    <i id="backBtn" class="fas fa-arrow-left toolbar-icon" style="display: none;"></i>
+                </div>
+                <div class="toolbar-center">
+                    <span id="mediaDateTime" class="media-date-time"></span>
+                    <span id="mediaIndex" class="media-index"></span>
+                </div>
+                <div class="toolbar-right">
+                    <i id="infoIcon" class="fas fa-info-circle toolbar-icon" style="display: none;"
+                        title="Media Information"></i>
+                    <i id="uploadIcon" class="fas fa-cloud-upload-alt upload-icon toolbar-icon"></i>
+                    <i id="downloadIcon" class="fas fa-cloud-download-alt toolbar-icon disabled"></i>
+                    <i id="deleteIcon" class="fas fa-trash-alt toolbar-icon disabled"></i>
+                </div>
+            </section>
+            <section id="mediaGalleryContainer">
+                <div id="mediaGallery">
+                    <!-- Media items will be dynamically added here -->
+                </div>
+                <section id="mediaSummary" class="media-summary">
+                    <p id="mediaCountText">0 Photos, 0 Videos</p>
+                </section>
+            </section>
+            <div id="mediaPopup" class="media-popup">
+                <div id="popupMedia" class="popup-media"></div>
+                <div id="infoWindow" class="info-window">
+                    <div class="info-header">
+                        <span class="info-title">Info</span>
+                        <span id="closeInfoWindow" class="close-btn">&times;</span>
+                    </div>
+                    <div class="info-content">
+                        <p id="infoContent"></p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div id="uploadModal" class="modal">
+        <div class="modal-content">
+            <span id="closeModalBtn" class="close">&times;</span>
+            <h2>Upload Files</h2>
+            <div id="fileList"></div>
+            <button id="confirmUploadBtn" class="upload-btn">Upload</button>
+        </div>
+    </div>
+
+    <div id="pageOverlay">
+        <div class="drop-overlay">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <p>Drag & Drop files here</p>
+        </div>
+    </div>
+
+    <input type="file" id="mediaInput" accept="image/*,video/*" multiple hidden>
+
+    <div id="customContextMenu" class="custom-context-menu">
+        <div class="menu-item" id="downloadMenuItem">
+            <i class="fas fa-download"></i>
+            <span>Download</span>
+        </div>
+        <div class="menu-item" id="deleteMenuItem">
+            <i class="fas fa-trash-alt"></i>
+            <span>Delete</span>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js"></script>
+    <script src="/script.js"></script>
+    <script>
+        window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+        window.si = window.si || function () { (window.siq = window.siq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
+    <script defer src="/_vercel/speed-insights/script.js"></script>
+</body>
+
+</html>
+```
+
+```css
+body {
+  font-family: 'Poly Sans Bulky', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #fff;
+  color: #000;
+  overflow: hidden;
+}
+
+@font-face {
+  font-family: "Poly Sans";
+  src: url('fonts/PolySansNeutral.ttf');
+  format: ('truetype');
+}
+
+@font-face {
+  font-family: "Poly Sans Bulky";
+  src: url('fonts/PolySansBulky.ttf');
+  format: ('truetype');
+}
+
+@font-face {
+  font-family: "Poly Sans Slim";
+  src: url('fonts/PolySansSlim.ttf');
+  format: ('truetype');
+}
+
+header {
+  background-color: #f5f5f7;
+  border-bottom: 1px solid #e6e6ea;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#headerTitleLink {
+    text-decoration: none;
+    color: inherit;
+}
+
+#headerTitleLink:hover {
+    text-decoration: underline;
+}
+
+h1 {
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+#welcomeMessage, #login, #signup {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  text-align: center;
+}
+
+.welcome-title {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.welcome-subtitle {
+  font-size: 1.5rem;
+  color: #666;
+}
+
+#notFoundMessage {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  text-align: center;
+}
+
+.not-found-title {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.not-found-subtitle {
+  font-size: 1.5rem;
+  color: #666;
+}
+
+main {
+  margin: 0 auto;
+  height: calc(100vh - 3rem);
+  display: flex;
+  flex-direction: column;
+  /* justify-content: center; */
+}
+
+#pageOverlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 999;
+  align-items: center;
+  justify-content: center;
+}
+
+#pageOverlay.active {
+  display: flex;
+}
+
+.drop-overlay {
+  border: 4px dashed #fff;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.drop-overlay i {
+  font-size: 4rem;
+  color: #fff;
+  margin-bottom: 1rem;
+}
+
+.drop-overlay p {
+  margin: 0;
+  color: #fff;
+  font-size: 1.5rem;
+}
+
+.custom-context-menu {
+  display: none;
+  position: fixed;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  z-index: 1000;
+}
+
+.menu-item {
+  padding: 8px 16px;
+  font-family: 'Poly Sans';
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.menu-item:hover {
+  background-color: #f0f0f0;
+}
+
+.menu-item i {
+  margin-right: 8px;
+}
+
+#downloadMenuItem {
+  color: black;
+}
+
+#deleteMenuItem {
+  color: red;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0.3rem;
+  background-color: #fff;
+  font-family: 'Poly Sans';
+}
+
+.toolbar-left, .toolbar-center, .toolbar-right {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-left {
+  justify-content: flex-start;
+}
+
+.toolbar-center {
+  justify-content: center;
+  flex-direction: column;
+}
+
+.toolbar-right {
+  justify-content: flex-end;
+}
+
+.media-date-time {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.media-index {
+  font-size: 0.9rem;
+  color: #707070;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+#backBtn {
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.toolbar-icon {
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 7px;
+  border-radius: 10px;
+  transition: color 0.3s ease, opacity 0.3s ease;
+  margin-left: 5px;
+  color: #0071e3;
+  opacity: 1;
+}
+
+.toolbar-icon.disabled {
+  color: #d4d4d4;
+  cursor: initial;
+  opacity: 0.5;
+}
+
+.toolbar-icon:not(.disabled):hover {
+  background-color: #ebebeb;
+}
+
+#backBtn {
+  display: inline-block;
+  opacity: 0;
+  margin-right: auto;
+}
+
+.media-item.animating {
+  position: fixed;
+  z-index: 1001;
+  transition: all 0.3s ease;
+}
+
+#mediaGalleryContainer.blurred {
+  filter: blur(5px);
+  transition: filter 0.3s ease;
+}
+
+#infoIcon {
+  font-size: 1.3rem;
+  cursor: pointer;
+  padding: 7px;
+  border-radius: 10px;
+  transition: color 0.3s ease, background-color 0.3s ease;
+  color: #0071e3;
+  margin-right: 5px;
+}
+
+#infoIcon:hover {
+  color: #333;
+  background-color: #ebebeb;
+}
+
+.info-content p {
+  margin: 0;
+  margin-bottom: 0.5rem;
+}
+
+.info-content p:last-child {
+  margin-bottom: 0;
+}
+
+.info-content strong {
+  margin-right: 0.5rem;
+}
+
+.description-line {
+  display: flex;
+  align-items: center;
+}
+
+.description-line #descriptionText {
+  flex: 1;
+}
+
+.description-line .skeleton-text {
+  width: 100%;
+}
+
+#mediaGalleryContainer {
+  position: relative;
+  flex: 1;
+  overflow-y: auto;
+}
+
+#mediaGallery {
+  padding: 1rem 2rem 0rem;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 1rem;
+}
+
+.placeholder-thumbnail {
+  width: 120px;
+  height: 120px;
+  background-color: #f0f0f0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #999;
+  font-size: 14px;
+  text-align: center;
+}
+
+.media-popup {
+  display: none;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background-color: white;
+  z-index: 999;
+  overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.media-popup.active {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  opacity: 1;
+}
+
+.popup-media {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.popup-media img,
+.popup-media video {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.info-window {
+  position: absolute;
+  top: 50px;
+  left: 50px;
+  width: 300px;
+  background-color: white;
+  border: 1px solid #ccc;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  border-radius: 8px;
+  z-index: 1002;
+  display: none;
+}
+
+.info-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e6e6ea;
+  cursor: move;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.info-title {
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.close-btn {
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.info-content {
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+  font-family: 'Poly Sans';
+}
+
+.media-item {
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  padding: 6px;
+}
+
+.media-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  max-height: 100%;
+  transition: all .2s ease-in-out;
+  cursor: pointer;
+}
+
+.media-item img,
+.media-item video {
+  width: 100%;
+  height: 100%;
+}
+
+.media-thumbnail {
+  display: block;
+  max-width: 120px;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.media-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 4px;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+
+.media-wrapper:hover {
+  transform: scale(1.05);
+}
+
+.media-item.selected:hover .media-wrapper {
+  transform: none;
+}
+
+.media-wrapper:hover .media-overlay {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.media-item.selected .media-wrapper::after {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  right: -4px;
+  bottom: -4px;
+  border: 3px solid #0071eb;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.media-summary {
+  text-align: center;
+  padding: 1rem;
+}
+
+#mediaCountText {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0, 0, 0, 0.4);
+  padding-top: 60px;
+}
+
+.modal-content {
+  background-color: #fff;
+  margin: 5% auto;
+  padding: 20px;
+  border: 1px solid #e6e6ea;
+  width: 80%;
+  max-width: 500px;
+  border-radius: 4px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.close:hover,
+.close:focus {
+  color: black;
+}
+
+#fileList {
+  margin-top: 1rem;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f8f8;
+  border-radius: 4px;
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.progress-container {
+  width: 100%;
+  background-color: #e6e6ea;
+  border-radius: 4px;
+  margin-top: 5px;
+}
+
+.progress-bar {
+  width: 0%;
+  height: 4px;
+  background-color: #000;
+  border-radius: 4px;
+  transition: width 0.3s ease-in-out;
+}
+
+#authButtons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.upload-btn,
+.auth-btn {
+  background-color: #f5f5f7;
+  font-family: 'Poly Sans';
+  color: #000;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease;
+}
+
+.upload-btn:hover,
+.auth-btn:hover {
+  background-color: #e2e2e4;
+}
+
+.auth-form {
+  max-width: 300px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.auth-form h2 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.auth-form input {
+  width: 100%;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid #e6e6ea;
+  border-radius: 4px;
+  font-size: 1rem;
+}
+
+.auth-form .auth-btn {
+  width: 100%;
+}
+
+.auth-link {
+  text-align: center;
+  margin-top: 1rem;
+  font-family: 'Poly Sans';
+}
+
+.auth-link a {
+  color: #000;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-link a:hover {
+  text-decoration: underline;
+}
+
+.skeleton-text {
+  display: inline-block;
+  vertical-align: middle;
+  height: 20px;
+  background: #eee;
+  margin-bottom: 0;
+  background: linear-gradient(270deg, #f1f1f1, #e1e1e1, #f1f1f1);
+  background-size: 200% 100%;
+  border-radius: 4px;
+
+  -webkit-animation: gradientMoves 800ms linear infinite;
+  -moz-animation: gradientMoves 800ms linear infinite;
+  animation: gradientMoves 800ms linear infinite;
+}
+
+@-webkit-keyframes gradientMoves {
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:200% 50%}
+}
+@-moz-keyframes gradientMoves {
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:200% 50%}
+}
+@keyframes gradientMoves { 
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:200% 50%}
+}
+```

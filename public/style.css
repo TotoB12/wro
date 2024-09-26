@@ -27,6 +27,32 @@ body {
   position: relative;
 }
 
+#toolbar {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  background-color: #f1f1f1;
+}
+
+.toolbar-button {
+  background: none;
+  border: none;
+  font-size: 1em;
+  cursor: pointer;
+  padding: 5px;
+}
+
+.toolbar-button.active {
+  font-weight: bold;
+}
+
+#editor-container {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 60px);
+  overflow: hidden;
+}
+
 #editor {
   width: 100%;
   height: 100%;
@@ -38,7 +64,6 @@ body {
   white-space: pre-wrap;
   overflow-y: auto;
   caret-color: transparent;
-  position: relative;
 }
 
 #autoComplete {
@@ -60,4 +85,8 @@ body {
   -webkit-user-select: none;
   user-select: none;
   transition: all 0.1s ease;
+}
+
+.bold {
+  font-family: "Poly Sans Bulky", Arial, sans-serif;
 }
