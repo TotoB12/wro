@@ -140,11 +140,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const selection = window.getSelection();
       if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
-        
+
         const resultNode = document.createTextNode(result);
-        
+
         range.insertNode(resultNode);
-        
+
         range.setStartAfter(resultNode);
         range.setEndAfter(resultNode);
         selection.removeAllRanges();
@@ -172,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
     animationSpan.style.opacity = '0';
     animationSpan.style.transform = 'translateY(-20px)';
     animationSpan.style.transition = 'opacity 0.1s ease-out, transform 0.1s ease-out';
-    
+
     animationSpan.offsetHeight;
 
     animationSpan.style.opacity = '1';
