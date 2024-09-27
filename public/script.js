@@ -165,7 +165,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     animationSpan.style.display = 'inline-block';
     animationSpan.style.opacity = '0';
-    animationSpan.style.transform = 'translateY(-20px)';
+    animationSpan.style.transform = 'translateY(20px)';
     animationSpan.style.transition = 'opacity 0.1s ease-out, transform 0.1s ease-out';
 
     animationSpan.offsetHeight;
