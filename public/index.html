@@ -15,13 +15,16 @@
 
 <body>
   <div id="toolbar">
-    <button id="boldButton" class="toolbar-button">B</button>
-    <button id="italicButton" class="toolbar-button"><i>I</i></button>
-    <button id="underlineButton" class="toolbar-button"><u>U</u></button>
+    <button id="boldButton" class="toolbar-button" title="Bold"><i class="fas fa-bold"></i></button>
+    <button id="italicButton" class="toolbar-button" title="Italic"><i class="fas fa-italic"></i></button>
+    <button id="underlineButton" class="toolbar-button" title="Underline"><i class="fas fa-underline"></i></button>
+    <button id="headingButton" class="toolbar-button" title="Heading"><i class="fas fa-heading"></i></button>
+    <button id="listButton" class="toolbar-button" title="Bullet List"><i class="fas fa-list-ul"></i></button>
   </div>
   <div id="editor-container">
     <div id="editor" contenteditable="true" spellcheck="false"></div>
     <div id="custom-cursor"></div>
+    <div id="auto-complete"></div>
   </div>
 
   <script src="/script.js"></script>

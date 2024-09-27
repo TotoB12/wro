@@ -1,11 +1,17 @@
 document.addEventListener('DOMContentLoaded', () => {
   const editor = document.getElementById('editor');
   const customCursor = document.getElementById('custom-cursor');
-  const boldButton = document.getElementById('boldButton');
-  const italicButton = document.getElementById('italicButton');
-  const underlineButton = document.getElementById('underlineButton');
+  const autoComplete = document.getElementById('auto-complete');
   const toolbar = document.getElementById('toolbar');
   const editorContainer = document.getElementById('editor-container');
+
+  const buttons = {
+    bold: document.getElementById('boldButton'),
+    italic: document.getElementById('italicButton'),
+    underline: document.getElementById('underlineButton'),
+    heading: document.getElementById('headingButton'),
+    list: document.getElementById('listButton')
+  };
 
   const savedNote = localStorage.getItem('userNote');
   if (savedNote) {
@@ -109,20 +115,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const showAutoComplete = (result) => {
-    removeAutoComplete();
-    const autoCompleteSpan = document.createElement('span');
-    autoCompleteSpan.textContent = result.toString();
-    autoCompleteSpan.style.color = '#999';
-    autoCompleteSpan.style.position = 'absolute';
-    autoCompleteSpan.style.fontSize = getComputedStyle(editor).fontSize;
-    autoCompleteSpan.style.fontFamily = getComputedStyle(editor).fontFamily;
-    autoCompleteSpan.id = 'autoComplete';
-
     const { x, y } = getCaretCoordinates();
-    autoCompleteSpan.style.left = `${x}px`;
-    autoCompleteSpan.style.top = `${y}px`;
+    const containerRect = editorContainer.getBoundingClientRect();
 
-    editor.parentNode.appendChild(autoCompleteSpan);
+    autoComplete.textContent = result.toString();
+    autoComplete.style.display = 'block';
+    autoComplete.style.left = `${x - containerRect.left}px`;
+    autoComplete.style.top = `${y - containerRect.top + 20}px`;
 
     const selection = window.getSelection();
     if (selection.rangeCount > 0) {
@@ -131,33 +130,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  const removeAutoComplete = () => {
-    const existingAutoComplete = document.getElementById('autoComplete');
-    if (existingAutoComplete) {
-      existingAutoComplete.remove();
-    }
+  const hideAutoComplete = () => {
+    autoComplete.style.display = 'none';
   };
 
   const insertAutoComplete = () => {
-    const autoCompleteSpan = document.getElementById('autoComplete');
-    if (autoCompleteSpan) {
-      const result = autoCompleteSpan.textContent;
+    if (autoComplete.style.display !== 'none') {
+      const result = autoComplete.textContent;
       const selection = window.getSelection();
       if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
-
         const resultNode = document.createTextNode(result);
-
         range.insertNode(resultNode);
-
         range.setStartAfter(resultNode);
         range.setEndAfter(resultNode);
         selection.removeAllRanges();
         selection.addRange(range);
-
-        removeAutoComplete();
+        hideAutoComplete();
         animateInsertion(resultNode);
-
         saveNote();
       }
     }
@@ -202,20 +192,30 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   };
 
-  boldButton.addEventListener('click', () => {
-    document.execCommand('bold');
+  const toggleFormat = (command) => {
+    document.execCommand(command);
+    updateFormattingState();
+    editor.focus();
+  };
+
+  buttons.bold.addEventListener('click', () => toggleFormat('bold'));
+  buttons.italic.addEventListener('click', () => toggleFormat('italic'));
+  buttons.underline.addEventListener('click', () => toggleFormat('underline'));
+  buttons.heading.addEventListener('click', () => {
+    const selection = window.getSelection();
+    const range = selection.getRangeAt(0);
+    const parentElement = range.commonAncestorContainer.parentElement;
+
+    if (parentElement.tagName.match(/^H[1-6]$/)) {
+      document.execCommand('formatBlock', false, 'p');
+    } else {
+      document.execCommand('formatBlock', false, 'h2');
+    }
     updateFormattingState();
     editor.focus();
   });
-
-  italicButton.addEventListener('click', () => {
-    document.execCommand('italic');
-    updateFormattingState();
-    editor.focus();
-  });
-
-  underlineButton.addEventListener('click', () => {
-    document.execCommand('underline');
+  buttons.list.addEventListener('click', () => {
+    document.execCommand('insertUnorderedList');
     updateFormattingState();
     editor.focus();
   });
@@ -224,48 +224,51 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key === 'Tab') {
       event.preventDefault();
       insertAutoComplete();
-    } else if (event.ctrlKey && event.key.toLowerCase() === 'b') {
-      event.preventDefault();
-      document.execCommand('bold');
-      updateFormattingState();
-    } else if (event.ctrlKey && event.key.toLowerCase() === 'i') {
-      event.preventDefault();
-      document.execCommand('italic');
-      updateFormattingState();
-    } else if (event.ctrlKey && event.key.toLowerCase() === 'u') {
-      event.preventDefault();
-      document.execCommand('underline');
-      updateFormattingState();
+    } else if (event.ctrlKey || event.metaKey) {
+      switch (event.key.toLowerCase()) {
+        case 'b':
+          event.preventDefault();
+          toggleFormat('bold');
+          break;
+        case 'i':
+          event.preventDefault();
+          toggleFormat('italic');
+          break;
+        case 'u':
+          event.preventDefault();
+          toggleFormat('underline');
+          break;
+      }
     }
   });
 
   editor.addEventListener('click', () => {
     if (hasCursorMoved()) {
-      removeAutoComplete();
+      hideAutoComplete();
     }
   });
 
   const updateFormattingState = () => {
-    const isBoldActive = document.queryCommandState('bold');
-    const isItalicActive = document.queryCommandState('italic');
-    const isUnderlineActive = document.queryCommandState('underline');
+    const commands = ['bold', 'italic', 'underline'];
+    commands.forEach(cmd => {
+      if (document.queryCommandState(cmd)) {
+        buttons[cmd].classList.add('active');
+      } else {
+        buttons[cmd].classList.remove('active');
+      }
+    });
 
-    if (isBoldActive) {
-      boldButton.classList.add('active');
+    const parentElement = window.getSelection().anchorNode.parentElement;
+    if (parentElement.tagName.match(/^H[1-6]$/)) {
+      buttons.heading.classList.add('active');
     } else {
-      boldButton.classList.remove('active');
+      buttons.heading.classList.remove('active');
     }
 
-    if (isItalicActive) {
-      italicButton.classList.add('active');
+    if (parentElement.closest('ul')) {
+      buttons.list.classList.add('active');
     } else {
-      italicButton.classList.remove('active');
-    }
-
-    if (isUnderlineActive) {
-      underlineButton.classList.add('active');
-    } else {
-      underlineButton.classList.remove('active');
+      buttons.list.classList.remove('active');
     }
   };
 
@@ -275,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       updateCustomCursor();
       if (hasCursorMoved()) {
-        removeAutoComplete();
+        hideAutoComplete();
       }
       const selection = window.getSelection();
       if (selection.rangeCount > 0) {

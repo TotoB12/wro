@@ -32,18 +32,26 @@ body {
   align-items: center;
   padding: 10px;
   background-color: #f1f1f1;
+  border-bottom: 1px solid #ddd;
 }
 
 .toolbar-button {
   background: none;
   border: none;
-  font-size: 1em;
+  font-size: 1.2em;
   cursor: pointer;
-  padding: 5px;
+  padding: 8px;
+  margin: 0 5px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.toolbar-button:hover {
+  background-color: #e0e0e0;
 }
 
 .toolbar-button.active {
-  font-weight: bold;
+  background-color: #d0d0d0;
 }
 
 #editor-container {
@@ -64,11 +72,18 @@ body {
   white-space: pre-wrap;
   overflow-y: auto;
   caret-color: transparent;
+  line-height: 1.6;
 }
 
-#autoComplete {
+#auto-complete {
   position: absolute;
-  pointer-events: none;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 5px;
+  font-size: 1em;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  display: none;
 }
 
 #editor::selection {
@@ -97,4 +112,13 @@ i {
 
 u {
   text-decoration: underline;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: "Poly Sans", Arial, sans-serif;
+  margin-bottom: 0.5em;
+}
+
+ul {
+  padding-left: 20px;
 }
