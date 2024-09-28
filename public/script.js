@@ -24,14 +24,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let saveTimeout;
   let lastCursorPosition = { node: null, offset: 0 };
+  let mathMode = false;
+  let currentEquation = '';
 
   editor.addEventListener('input', (event) => {
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(saveNote, 300);
     updateCustomCursor();
-    if (event.inputType === 'insertText' && event.data === '=') {
-      processEquation();
-    }
+    handleMathInput(event);
   });
 
   const getCaretCoordinates = () => {
@@ -70,27 +70,48 @@ document.addEventListener('DOMContentLoaded', () => {
     customCursor.style.top = `${clampedY}px`;
   };
 
-  const processEquation = () => {
-    const currentLine = getCurrentLine();
-    if (currentLine) {
-      const equationMatch = currentLine.match(/(\S+)=$/);
-      if (equationMatch) {
-        const equation = equationMatch[1];
-        try {
-          const result = math.evaluate(equation);
-          if (typeof result === 'number') {
-            showAutoComplete(result);
-          }
-        } catch (error) {
-          console.log('Invalid equation');
-        }
+  const handleMathInput = (event) => {
+    if (event.inputType === 'insertText' && event.data === '=') {
+      mathMode = true;
+      currentEquation = getCurrentLine().split('=')[0].trim();
+      processEquation();
+    } else if (mathMode) {
+      if (event.inputType === 'insertText' && event.data !== null) {
+        currentEquation += event.data;
+        processEquation();
+      } else if (event.inputType === 'deleteContentBackward') {
+        exitMathMode();
       }
+    }
+  };
+
+  const exitMathMode = () => {
+    mathMode = false;
+    currentEquation = '';
+    hideAutoComplete();
+  };
+
+  const processEquation = () => {
+    if (currentEquation) {
+      try {
+        const result = math.evaluate(currentEquation);
+        if (typeof result === 'number' || typeof result === 'boolean') {
+          showAutoComplete(result);
+        } else if (result && typeof result === 'object') {
+          showAutoComplete(JSON.stringify(result));
+        }
+      } catch (error) {
+        console.log('Invalid equation');
+        hideAutoComplete();
+      }
+    } else {
+      hideAutoComplete();
     }
   };
 
   const getCurrentLine = () => {
     const selection = window.getSelection();
-    if (selection.rangeCount === 0) return;
+    if (selection.rangeCount === 0) return '';
 
     const range = selection.getRangeAt(0);
     const node = range.startContainer;
@@ -112,6 +133,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       return currentLine.trim();
     }
+    return '';
   };
 
   const showAutoComplete = (result) => {
@@ -149,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
         hideAutoComplete();
         animateInsertion(resultNode);
         saveNote();
+        exitMathMode();
       }
     }
   };
@@ -224,6 +247,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (event.key === 'Tab') {
       event.preventDefault();
       insertAutoComplete();
+    } else if (event.key === 'Escape') {
+      exitMathMode();
+    } else if (event.key === 'Backspace' && mathMode) {
+      exitMathMode();
     } else if (event.ctrlKey || event.metaKey) {
       switch (event.key.toLowerCase()) {
         case 'b':
@@ -244,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   editor.addEventListener('click', () => {
     if (hasCursorMoved()) {
-      hideAutoComplete();
+      exitMathMode();
     }
   });
 
@@ -278,7 +305,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
       updateCustomCursor();
       if (hasCursorMoved()) {
-        hideAutoComplete();
+        exitMathMode();
       }
       const selection = window.getSelection();
       if (selection.rangeCount > 0) {
