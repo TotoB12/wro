@@ -3,7 +3,7 @@
   export const ssr = false; 
 
   import { onMount, onDestroy } from 'svelte';
-  import { browser } from '$app/environment'; // Useful for conditional client-side logic if not disabling SSR
+  import { browser } from '$app/environment'; 
   import * as math from 'mathjs';
 
   // --- State Variables ---
@@ -15,9 +15,9 @@
   let editorContent = ''; 
 
   let saveTimeout;
-  let lastCursorPosition = { node: null, offset: 0 };
+  let lastCursorPosition = { node: null, offset: 0 }; // Used to detect cursor movement
   let mathMode = false;
-  let currentEquation = '';
+  let currentEquation = ''; // Stores the expression PART of the math input (e.g. "2+2")
 
   let isBoldActive = false;
   let isItalicActive = false;
@@ -27,28 +27,38 @@
 
   // --- Lifecycle Functions ---
   onMount(() => {
-    // All code here runs only in the browser
+    if (!browser) return; 
+
     const savedNote = localStorage.getItem('userNote');
     if (savedNote) {
       editorContent = savedNote; 
-      if (editorElement) editorElement.innerHTML = savedNote; // Ensure editor reflects loaded content
+      if (editorElement) {
+        editorElement.innerHTML = savedNote; 
+        
+        const range = document.createRange();
+        const sel = window.getSelection();
+        range.selectNodeContents(editorElement);
+        range.collapse(false); 
+        if (sel) {
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+      }
     }
     
-    // Initial updates require DOM to be ready
     updateCustomCursor(); 
     updateFormattingState(); 
 
     document.addEventListener('selectionchange', handleSelectionChange);
     window.addEventListener('resize', updateCustomCursor);
     
-    if (editorElement) {
+    if (editorElement) { // Always focus editor on mount if element exists
         editorElement.focus();
     }
   });
 
   onDestroy(() => {
     clearTimeout(saveTimeout);
-    // Ensure to remove listeners only if they were added (i.e., in browser)
     if (browser) {
         document.removeEventListener('selectionchange', handleSelectionChange);
         window.removeEventListener('resize', updateCustomCursor);
@@ -57,128 +67,160 @@
 
   // --- Core Editor Functions ---
   const saveNote = () => {
-    // localStorage is browser-only
     if (browser) {
         localStorage.setItem('userNote', editorContent);
     }
   };
 
-  function handleEditorInput(event) {
+  function handleEditorInput(event) { // event is the native InputEvent
     // editorContent is automatically updated by Svelte's bind:innerHTML
-    // However, if you manipulate innerHTML directly, ensure editorContent is synced if needed
-    // For contenteditable with bind:innerHTML, Svelte handles the sync from DOM to variable.
     clearTimeout(saveTimeout);
     saveTimeout = setTimeout(saveNote, 300);
-    updateCustomCursor();
-    handleMathInput(event.nativeEvent || event); // Pass the native event if available
-    updateFormattingState(); 
+    
+    updateCustomCursor(); // Update cursor position after input
+    handleMathInput(event); // Process for math mode based on current input
+    updateFormattingState(); // Update toolbar based on selection after input
   }
 
   const getCaretCoordinates = () => {
-    if (!browser) return { x: 0, y: 0 }; // Should not be called on server with ssr=false
+    if (!browser) return { x: 0, y: 0 };
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return { x: 20, y: 20 }; 
+    // Provide a default position if no selection or editor not focused
+    if (!selection || selection.rangeCount === 0 || !editorElement || !editorElement.contains(selection.anchorNode)) {
+        if (editorElement) { // Default to top-left of editor + padding
+            const editorRect = editorElement.getBoundingClientRect();
+            const editorStyle = getComputedStyle(editorElement);
+            return { 
+                x: editorRect.left + (parseInt(editorStyle.paddingLeft) || 0), 
+                y: editorRect.top + (parseInt(editorStyle.paddingTop) || 0)
+            };
+        }
+        return { x: 20, y: 20 }; // Fallback if editorElement not ready
+    }
 
     const range = selection.getRangeAt(0).cloneRange();
     range.collapse(true); 
 
     const dummy = document.createElement('span');
-    dummy.textContent = '\u200b'; 
+    dummy.textContent = '\u200b'; // Zero-width space
     range.insertNode(dummy);
 
     const rect = dummy.getBoundingClientRect();
     const x = rect.left;
     const y = rect.top;
 
-    if (dummy.parentNode) { // Check if dummy is still in DOM
+    if (dummy.parentNode) {
         dummy.parentNode.removeChild(dummy);
     }
     
-    return { x, y };
+    // Check if the editor is scrolled, to adjust y relative to viewport
+    const editorScrollTop = editorElement ? editorElement.scrollTop : 0;
+    return { x, y: y + editorScrollTop }; // y should be relative to document for container comparison
   };
+
 
   const updateCustomCursor = () => {
     if (!browser || !customCursorElement || !editorContainerElement || !editorElement) return;
 
-    const { x, y } = getCaretCoordinates();
-    const containerRect = editorContainerElement.getBoundingClientRect();
-
-    const cursorX = x - containerRect.left;
-    let cursorY = y - containerRect.top;
-    cursorY += 2; 
-
+    const coords = getCaretCoordinates(); // These are viewport-relative generally, or adjusted for scroll
+    const containerRect = editorContainerElement.getBoundingClientRect(); // editor-container is the reference
     const editorStyle = getComputedStyle(editorElement);
-    const editorFontSize = parseInt(editorStyle.fontSize) || 16; 
+
+    // Calculate position relative to the editorContainerElement
+    let cursorX = coords.x - containerRect.left;
+    let cursorY = coords.y - containerRect.top;
+
+    // If getCaretCoordinates() didn't factor in editorElement.scrollTop, adjust here.
+    // It appears my getCaretCoordinates attempts this, so cursorY above *should* be relative to non-scrolled content.
+    // Let's adjust for scroll directly here to be sure.
+    cursorY -= editorElement.scrollTop; // Adjust Y for the editor's internal scroll
+
+    cursorY += 2; // Small offset to align better visually, depends on font/line-height
+
+    const cursorActualHeight = customCursorElement.offsetHeight || (parseFloat(editorStyle.fontSize) * 1.2); // Use actual height or an estimate
+    const cursorActualWidth = customCursorElement.offsetWidth || 2;
     
-    const clampedX = Math.max(0, Math.min(cursorX, editorElement.clientWidth - 2)); 
-    const clampedY = Math.max(0, Math.min(cursorY, editorElement.clientHeight - editorFontSize));
+    const clampedX = Math.max(0, Math.min(cursorX, editorElement.clientWidth - cursorActualWidth)); 
+    const clampedY = Math.max(0, Math.min(cursorY, editorElement.clientHeight - cursorActualHeight));
 
     customCursorElement.style.left = `${clampedX}px`;
     customCursorElement.style.top = `${clampedY}px`;
+    // Height is set by CSS: #custom-cursor { height: 1.2em; }
+    // If dynamic height is preferred based on actual line:
+    // const currentLineHeight = parseFloat(editorStyle.lineHeight) || (parseFloat(editorStyle.fontSize) * 1.6);
+    // customCursorElement.style.height = `${currentLineHeight}px`;
   };
 
+
   // --- Math Input Handling ---
-  const handleMathInput = (event) => {
+  const handleMathInput = (event) => { // event is native InputEvent
     if (!browser || !event || !event.inputType) return;
 
-    if (event.inputType === 'insertText' && event.data === '=') {
-      mathMode = true;
-      const currentLineText = getCurrentLine();
-      // Ensure currentLineText is not null or undefined before splitting
-      currentEquation = currentLineText ? currentLineText.split('=')[0].trim() : "";
-      processEquation();
-    } else if (mathMode) {
-      const line = getCurrentLine();
-      if (event.inputType === 'insertText' && event.data !== null) {
-        const parts = line ? line.split('=') : [];
-        if (parts.length > 1) {
-            currentEquation = parts.pop() || ""; // The part after the last '=', ensure it's a string
-        } else if (parts.length === 1 && line && line.includes('=')) { // e.g. "2*2=" then type
-            currentEquation = ""; // Start new equation part
-        }
-        // Append the new character to currentEquation if it's being built after '='
-        // This part of the logic might need refinement based on exact behavior of getCurrentLine and user input flow
-        // For now, let's assume currentEquation is the part *after* the equals.
-        // If currentEquation is meant to be built from scratch after '=', it should be reset then appended.
-        // currentEquation += event.data; // This was from original, might need adjustment
-        // Let's assume getCurrentLine and then processing the part after '=' is more robust
-        processEquation();
+    const inputType = event.inputType;
+    const data = event.data;
 
-      } else if (event.inputType === 'deleteContentBackward') {
-        if (!line || !line.includes('=')) {
-            exitMathMode();
-        } else {
-            const parts = line.split('=');
-            if (parts.length > 1) {
-                currentEquation = parts.pop() || "";
-                 if (currentEquation === '') {
-                    hideAutoComplete(); 
-                 } else {
+    if (mathMode) { // If already in math mode
+        if (inputType === 'deleteContentBackward') {
+            // Current line (which includes the equation prefix and '=')
+            // Get content up to cursor to check if '=' was just deleted
+            const selection = window.getSelection();
+            if (!selection || selection.rangeCount === 0) { exitMathMode(); return; }
+            const range = selection.getRangeAt(0);
+            const textBeforeCursor = range.startContainer.nodeValue?.substring(0, range.startOffset) || "";
+
+            // This needs robust getCurrentLine to know the expression context
+            const lineContext = getCurrentLine(); 
+            if (lineContext.includes("=")) {
+                 const parts = lineContext.split("=");
+                 currentEquation = parts[0].trim(); // Expression before "="
+                 if(currentEquation) {
                     processEquation();
+                 } else {
+                    hideAutoComplete(); // Equation part became empty
                  }
             } else {
+                // '=' character likely deleted or cursor moved away from expression context
                 exitMathMode();
             }
+
+        } else if (inputType.startsWith('insert')) { // e.g. insertText, insertLineBreak, insertParagraph
+            // Any insertion after '=' implies user is moving on, not using the result.
+            // Tab and Escape for insertion/exit are handled in on:keydown
+            exitMathMode();
         }
-      }
+        // Other types: insertFromPaste, formatBold, etc. also exit.
+        // else if (!inputType.startsWith("history")) { // Don't exit on undo/redo perhaps
+        //    exitMathMode();
+        // }
+    } else { // Math mode is NOT active, check if this input should activate it
+        if (inputType === 'insertText' && data === '=') {
+            const lineTextBeforeEquals = getCurrentLine().slice(0, -1); // Get current line content *excluding* the just-typed '='
+            
+            if (lineTextBeforeEquals && lineTextBeforeEquals.trim() !== "") {
+                currentEquation = lineTextBeforeEquals.trim();
+                mathMode = true;
+                processEquation();
+            }
+            // If line before '=' is empty, do nothing (e.g. user types '=' on an empty line)
+        }
     }
   };
   
   const exitMathMode = () => {
-    mathMode = false;
-    currentEquation = '';
-    hideAutoComplete();
+    if (mathMode) { // Only change state if actually in math mode
+        mathMode = false;
+        currentEquation = ''; 
+        hideAutoComplete();
+    }
   };
 
   const processEquation = () => {
     if (!browser) return;
-    if (currentEquation && mathMode) {
+    if (currentEquation && mathMode) { 
       try {
         const result = math.evaluate(currentEquation);
-        if (typeof result === 'number' || typeof result === 'boolean' || (result && typeof result.toString === 'function')) {
+        if (result !== undefined && result !== null && typeof result.toString === 'function') {
           showAutoComplete(result.toString());
-        } else if (result && typeof result === 'object') {
-          showAutoComplete(JSON.stringify(result)); 
         } else {
           hideAutoComplete();
         }
@@ -186,7 +228,7 @@
         hideAutoComplete();
       }
     } else {
-      hideAutoComplete();
+      hideAutoComplete(); // Also hide if not in mathMode or no currentEquation
     }
   };
 
@@ -198,35 +240,30 @@
     const range = selection.getRangeAt(0);
     let node = range.startContainer;
     
+    // Simplified: work within the current text node primarily
+    if (node.nodeType === Node.TEXT_NODE && node.nodeValue) {
+      const textUpToCursorInNode = node.nodeValue.substring(0, range.startOffset);
+      // For current line, usually we want text from line start up to cursor
+      const linePartBefore = textUpToCursorInNode.split('\n').pop() || "";
+      // To get full line:
+      // const textFromCursorInNode = node.nodeValue.substring(range.startOffset);
+      // const linePartAfter = textFromCursorInNode.split('\n')[0] || "";
+      // return linePartBefore + linePartAfter;
+      return linePartBefore; // For math, we usually care about what's *before* the cursor on this line segment
+    }
+    
+    // Fallback: If cursor is not in a text node, or complex structure
+    // Try to get text of parent block, but this is less precise for "current line up to cursor"
     let blockParent = node;
-    // Traverse up carefully, ensuring editorElement is defined (it will be if browser is true and onMount ran)
-    while (blockParent && blockParent.nodeType !== Node.ELEMENT_NODE && editorElement && blockParent.parentNode !== editorElement) {
-        if (!blockParent.parentNode) return ''; 
+    while (blockParent && blockParent !== editorElement && blockParent.nodeType !== Node.ELEMENT_NODE) {
+        if (!blockParent.parentNode) return '';
         blockParent = blockParent.parentNode;
     }
-
-    if (blockParent === editorElement && node.nodeType === Node.TEXT_NODE) {
-      // Handled below
-    } else if (blockParent && blockParent.nodeType === Node.ELEMENT_NODE && blockParent !== editorElement) {
-        node = blockParent;
-    } else if (node.nodeType === Node.ELEMENT_NODE && node.childNodes.length > 0 && range.startOffset < node.childNodes.length) {
-        const childNode = node.childNodes[range.startOffset];
-        if (childNode && childNode.nodeType === Node.TEXT_NODE) {
-            node = childNode; 
-        } else if (childNode && childNode.textContent) {
-             return childNode.textContent.trim(); 
-        }
+    if (blockParent && blockParent !== editorElement && blockParent.textContent) {
+        return blockParent.textContent.trim(); // Less precise
     }
-
-    if (node.nodeType === Node.TEXT_NODE && node.nodeValue) {
-      // Get text from start of line in this node to end of line in this node
-      const textBeforeCursor = node.nodeValue.substring(0, range.startOffset);
-      const textAfterCursor = node.nodeValue.substring(range.startOffset);
-      const linePartBefore = textBeforeCursor.split('\n').pop() || "";
-      const linePartAfter = textAfterCursor.split('\n')[0] || "";
-      return linePartBefore + linePartAfter;
-    } else if (node.textContent) { 
-      return node.textContent.trim();
+    if (node.textContent) {
+        return node.textContent.substring(0, range.startOffset).split('\n').pop() || "";
     }
     return '';
   };
@@ -234,18 +271,31 @@
 
   const showAutoComplete = (result) => {
     if (!browser || !autoCompleteElement || !editorContainerElement || !editorElement) return;
-    const { x, y } = getCaretCoordinates();
+    
+    // Use existing getCaretCoordinates for base position.
+    const coords = getCaretCoordinates(); // Viewport-relative
     const containerRect = editorContainerElement.getBoundingClientRect();
+    const editorStyle = getComputedStyle(editorElement);
+    const editorFontSize = parseInt(editorStyle.fontSize) || 16;
+    // const editorLineHeight = parseFloat(editorStyle.lineHeight) || (editorFontSize * 1.6);
 
-    autoCompleteElement.textContent = result.toString();
+
+    // Position relative to editorContainer, account for editor's own scroll
+    let acX = coords.x - containerRect.left;
+    let acY = coords.y - containerRect.top - editorElement.scrollTop + (editorFontSize * 1.2); // Approx one line below caret
+    // Use editor line height instead of editorFontSize * 1.2 if available and parsed
+    // acY = coords.y - containerRect.top - editorElement.scrollTop + editorLineHeight;
+
+
+    autoCompleteElement.textContent = result;
     autoCompleteElement.style.display = 'block';
-    autoCompleteElement.style.left = `${x - containerRect.left}px`;
-    autoCompleteElement.style.top = `${y - containerRect.top + 20 + editorElement.scrollTop}px`; // Adjust for scroll
+    autoCompleteElement.style.left = `${acX}px`;
+    autoCompleteElement.style.top = `${acY}px`;
 
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      lastCursorPosition = { node: range.startContainer, offset: range.startOffset };
+      const currentRange = selection.getRangeAt(0);
+      lastCursorPosition = { node: currentRange.startContainer, offset: currentRange.startOffset };
     }
   };
 
@@ -259,37 +309,61 @@
     if (!browser || !autoCompleteElement || autoCompleteElement.style.display === 'none' || !editorElement) return;
 
     const resultText = autoCompleteElement.textContent;
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      let currentNode = range.startContainer;
-      let currentOffset = range.startOffset;
-
-      if (currentNode.nodeType === Node.TEXT_NODE && currentNode.nodeValue) {
-        const text = currentNode.nodeValue;
-        // Find the last '=' before the current cursor position in this text node
-        const indexOfEquals = text.substring(0, currentOffset).lastIndexOf('=');
-        
-        if (indexOfEquals !== -1) {
-          range.setStart(currentNode, indexOfEquals + 1); // After '='
-          // range.setEnd(currentNode, currentOffset); // Up to cursor, already there by default
-          range.deleteContents(); 
-          
-          const resultNode = document.createTextNode(resultText);
-          range.insertNode(resultNode);
-          range.setStartAfter(resultNode);
-          range.setEndAfter(resultNode);
-          selection.removeAllRanges();
-          selection.addRange(range);
-
-          animateInsertion(resultNode);
-          editorContent = editorElement.innerHTML; 
-          saveNote();
-        }
-      }
-      exitMathMode();
-      editorElement.focus(); 
+    if (!resultText) {
+        exitMathMode();
+        editorElement.focus();
+        return;
     }
+    
+    const selection = window.getSelection();
+    if (!selection || !selection.rangeCount > 0) {
+        exitMathMode();
+        editorElement.focus();
+        return;
+    }
+    
+    const range = selection.getRangeAt(0);
+    // Assumes cursor is right after '=', e.g., "2+2=" <-- cursor here
+    // We want to insert the result, effectively replacing nothing or any tiny selection.
+    // The current currentEquation (e.g. "2+2") remains, then the result is appended.
+    // Then the original '=' might need to be removed if it's still there after cursor.
+
+    // A simple approach: delete the characters making up the equation *after* the equals.
+    // Since math mode triggered on '=', currentEquation is the LHS.
+    // We assume user typed "LHS=" then Tab.
+    // Range is at: LHS=X (X is caret position). currentEquation = LHS
+    // Insert `resultText`.
+
+    if (range.startContainer.nodeType === Node.TEXT_NODE && range.startContainer.nodeValue) {
+        const textNode = range.startContainer;
+        const offset = range.startOffset;
+        // Check if the character immediately before the cursor is '='
+        if (offset > 0 && textNode.nodeValue.substring(offset - 1, offset) === '=') {
+            // Correct. We are just after an equals sign. Insert result.
+        } else {
+            // Not directly after an equals, maybe cursor moved or structure is complex.
+            // Attempting to insert at current cursor position is a fallback.
+        }
+    } // else, if not a text node, insertion might be more complex. For now, assume common case.
+
+
+    range.deleteContents(); // Deletes selection. If caret is collapsed, deletes nothing.
+    const resultNode = document.createTextNode(resultText);
+    range.insertNode(resultNode);
+    
+    // Move cursor after the inserted text
+    range.setStartAfter(resultNode);
+    range.setEndAfter(resultNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+
+    animateInsertion(resultNode);
+    editorContent = editorElement.innerHTML; // Sync Svelte state with DOM
+    saveNote(); 
+
+    exitMathMode(); 
+    editorElement.focus(); 
+    updateCustomCursor();
   };
   
   const animateInsertion = (node) => {
@@ -304,17 +378,22 @@
     animationSpan.style.opacity = '0';
     animationSpan.style.transform = 'translateY(10px)'; 
     animationSpan.style.transition = 'opacity 0.1s ease-out, transform 0.1s ease-out';
-    animationSpan.offsetHeight; 
-    animationSpan.style.opacity = '1';
-    animationSpan.style.transform = 'translateY(0)';
+    
+    requestAnimationFrame(() => { 
+        animationSpan.style.opacity = '1';
+        animationSpan.style.transform = 'translateY(0)';
+    });
 
     setTimeout(() => {
       if (animationSpan.parentNode && animationSpan.firstChild === node) {
         animationSpan.parentNode.insertBefore(node, animationSpan);
         animationSpan.remove();
+      } else if (animationSpan.parentNode) { // Safety if node somehow detached
+        animationSpan.remove();
       }
-    }, 100); 
+    }, 110); // Slightly longer than transition (100ms)
   };
+
 
   const hasCursorMoved = () => {
     if (!browser) return true; 
@@ -322,24 +401,27 @@
     if (!selection || selection.rangeCount === 0) return true; 
 
     const range = selection.getRangeAt(0);
-    return (
+    const moved = (
       range.startContainer !== lastCursorPosition.node ||
       range.startOffset !== lastCursorPosition.offset
     );
+    // Update lastCursorPosition for the next check
+    if (moved) {
+      lastCursorPosition = { node: range.startContainer, offset: range.startOffset };
+    }
+    return moved;
   };
 
   function handleSelectionChange() {
     if (!browser) return;
-    setTimeout(() => {
+    // Using setTimeout 0 to allow browser to finish selection update before we react
+    setTimeout(() => { 
       updateCustomCursor();
-      if (hasCursorMoved()) {
-        // Consider if exiting math mode here is always desired
-        // exitMathMode(); 
-      }
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        lastCursorPosition = { node: range.startContainer, offset: range.startOffset };
+      // If autocomplete is visible and cursor moved significantly, maybe hide it or exit math mode
+      if (autoCompleteElement && autoCompleteElement.style.display !== 'none' && hasCursorMoved()) {
+          // Check if selection is still conducive to math mode or if user clicked far away
+          // Consider: if selection is no longer collapsed, or far from math context.
+          // exitMathMode(); // This can be aggressive; better to let input/keydown handle exit.
       }
       updateFormattingState();
     }, 0);
@@ -350,7 +432,8 @@
     document.execCommand(command, false, value);
     editorContent = editorElement.innerHTML; // Sync Svelte state
     updateFormattingState();
-    editorElement.focus();
+    saveNote(); // Also save on formatting changes
+    editorElement.focus(); // Keep focus in editor
   };
 
   const toggleFormat = (command) => {
@@ -361,18 +444,24 @@
     if (!browser || !window.getSelection) return;
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return;
-    const range = selection.getRangeAt(0);
     
-    let parentElement = range.commonAncestorContainer;
-    if (parentElement.nodeType === Node.TEXT_NODE) {
-      parentElement = parentElement.parentElement;
+    let commonAncestor = selection.getRangeAt(0).commonAncestorContainer;
+    if (commonAncestor.nodeType === Node.TEXT_NODE) {
+        commonAncestor = commonAncestor.parentElement;
+    }
+    
+    let isCurrentlyHeading = false;
+    let currentBlock = commonAncestor;
+    while(currentBlock && currentBlock !== editorElement) {
+        if (currentBlock.tagName && currentBlock.tagName.match(/^H[1-6]$/)) {
+            isCurrentlyHeading = true;
+            break;
+        }
+        if (!currentBlock.parentElement) break;
+        currentBlock = currentBlock.parentElement;
     }
 
-    if (parentElement && parentElement.tagName && parentElement.tagName.match(/^H[1-6]$/)) {
-      execCommandAndUpdate('formatBlock', 'p');
-    } else {
-      execCommandAndUpdate('formatBlock', 'h2');
-    }
+    execCommandAndUpdate('formatBlock', isCurrentlyHeading ? 'p' : 'h2');
   };
 
   const toggleList = () => {
@@ -393,35 +482,46 @@
       return;
     }
     
-    let parentElement = selection.anchorNode;
-    if (parentElement.nodeType === Node.TEXT_NODE) {
-        parentElement = parentElement.parentElement;
+    let parentNode = selection.anchorNode;
+    if (parentNode.nodeType === Node.TEXT_NODE) {
+        parentNode = parentNode.parentElement;
     }
 
     isHeadingActive = false;
-    let tempElement = parentElement;
-    while(tempElement && tempElement !== editorElement) { 
+    let tempElement = parentNode;
+    while(tempElement && tempElement !== editorElement && tempElement !== document.body) { 
         if (tempElement.tagName && tempElement.tagName.match(/^H[1-6]$/)) {
             isHeadingActive = true;
             break;
         }
-        if (!tempElement.parentElement) break; // Safety break
+        if (!tempElement.parentElement) break; 
         tempElement = tempElement.parentElement;
     }
     
-    isListActive = !!(parentElement && parentElement.closest && parentElement.closest('ul'));
+    isListActive = document.queryCommandState('insertUnorderedList') || document.queryCommandState('insertOrderedList');
+    if (!isListActive && parentNode && parentNode.closest) { // Fallback
+        isListActive = !!(parentNode.closest('ul') || parentNode.closest('ol'));
+    }
   };
-
 
   function handleEditorKeyDown(event) {
     if (!browser) return;
-    if (event.key === 'Tab') {
-      event.preventDefault();
-      insertAutoComplete();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      exitMathMode();
-    } else if (event.ctrlKey || event.metaKey) {
+
+    if (mathMode) { // Math mode takes priority for these keys
+        if (event.key === 'Tab') {
+            event.preventDefault();
+            insertAutoComplete();
+            return; 
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            exitMathMode();
+            return; 
+        }
+        // Let other keys fall through to on:input, which will then exit mathMode
+    }
+
+    // General shortcuts
+    if (event.ctrlKey || event.metaKey) {
       switch (event.key.toLowerCase()) {
         case 'b':
           event.preventDefault();
@@ -437,18 +537,22 @@
           break;
       }
     }
-    // Let Svelte's bind:innerHTML handle editorContent update for other keys
-    // Math input is handled in on:input via handleMathInput
+    // For line breaks (Enter, Shift+Enter), default browser behavior should handle it.
+    // Svelte's bind:innerHTML and on:input will pick up the changes.
   }
 
   function handleEditorClick() {
     if (!browser) return;
+    // If user clicks and autocomplete was visible, check if it makes sense to exit math mode.
+    // HasCursorMoved is useful here.
     if (autoCompleteElement && autoCompleteElement.style.display !== 'none') {
-        if (hasCursorMoved()) { // If click moved cursor away from active math editing
-            // exitMathMode(); // Consider if this is too aggressive
+        if (hasCursorMoved()) { // If click actually moved the cursor
+             // Potentially exit math mode, but be cautious not to be too aggressive.
+             // Often handled better by subsequent input or keydown.
         }
     }
     updateFormattingState(); 
+    updateCustomCursor(); // Ensure cursor updates on click too.
   }
 
 </script>
@@ -457,34 +561,34 @@
   <button 
     class="toolbar-button" 
     class:active={isBoldActive} 
-    title="Bold" 
+    title="Bold (Ctrl+B)" 
     aria-label="Bold" 
     on:click={() => toggleFormat('bold')}>
-    <i class="fas fa-bold"></i>
+    <i class="fas fa-bold" aria-hidden="true"></i>
   </button>
   <button 
     class="toolbar-button" 
     class:active={isItalicActive} 
-    title="Italic" 
+    title="Italic (Ctrl+I)" 
     aria-label="Italic" 
     on:click={() => toggleFormat('italic')}>
-    <i class="fas fa-italic"></i>
+    <i class="fas fa-italic" aria-hidden="true"></i>
   </button>
   <button 
     class="toolbar-button" 
     class:active={isUnderlineActive} 
-    title="Underline" 
+    title="Underline (Ctrl+U)" 
     aria-label="Underline" 
     on:click={() => toggleFormat('underline')}>
-    <i class="fas fa-underline"></i>
+    <i class="fas fa-underline" aria-hidden="true"></i>
   </button>
   <button 
     class="toolbar-button" 
     class:active={isHeadingActive} 
-    title="Heading" 
+    title="Toggle Heading" 
     aria-label="Toggle Heading" 
     on:click={toggleHeading}>
-    <i class="fas fa-heading"></i>
+    <i class="fas fa-heading" aria-hidden="true"></i>
   </button>
   <button 
     class="toolbar-button" 
@@ -492,7 +596,7 @@
     title="Bullet List" 
     aria-label="Toggle Bullet List" 
     on:click={toggleList}>
-    <i class="fas fa-list-ul"></i>
+    <i class="fas fa-list-ul" aria-hidden="true"></i>
   </button>
 </div>
 
@@ -516,7 +620,6 @@
 </div>
 
 <style>
-  /* Styles remain largely the same, ensure font paths are correct */
   @font-face {
     font-family: "Poly Sans";
     src: url('/fonts/PolySansNeutral.ttf') format('truetype');
@@ -541,27 +644,19 @@
     height: 100%;
     font-family: "Poly Sans Slim", Arial, sans-serif;
     background-color: #f9f9f9;
-    /* position: relative; -- Removed as SvelteKit's body > div handles structure */
   }
   
-  /* Ensure the root div SvelteKit uses takes full height */
-  :global(body > div#svelte) { /* More specific if SvelteKit adds an id */
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-   /* Fallback if no id */
-  :global(body > div:first-child) {
+  :global(body > div:first-child) { /* SvelteKit wrapper div */
     height: 100%;
     display: flex;
     flex-direction: column;
   }
 
-
-  :global(b) {
+  :global(b), :global(strong) {
     font-family: "Poly Sans Bulky", Arial, sans-serif;
+    font-weight: bold; 
   }
-  :global(i) {
+  :global(i), :global(em) {
     font-style: italic; 
   }
   :global(u) {
@@ -569,42 +664,58 @@
   }
   :global(h1), :global(h2), :global(h3), :global(h4), :global(h5), :global(h6) {
     font-family: "Poly Sans", Arial, sans-serif;
+    margin-top: 0.8em;
+    margin-bottom: 0.4em;
+    line-height: 1.3;
+  }
+  :global(ul), :global(ol) {
+    padding-left: 25px; 
+    margin-top: 0.5em;
     margin-bottom: 0.5em;
+    list-style-position: outside; 
   }
-  :global(ul) {
-    padding-left: 20px; 
-    list-style-position: inside; 
+  :global(p) {
+    margin-bottom: 0.5em; /* Ensure paragraphs created by formatBlock have some spacing */
   }
+
 
   #toolbar {
     display: flex;
     align-items: center;
-    padding: 10px;
+    padding: 8px 10px;
     background-color: #f1f1f1;
     border-bottom: 1px solid #ddd;
     flex-shrink: 0; 
+    gap: 5px;
   }
 
   .toolbar-button {
     background: none;
-    border: none;
-    font-size: 1.2em; 
+    border: 1px solid transparent; 
+    font-size: 1.1em; 
     cursor: pointer;
-    padding: 8px;
-    margin: 0 5px;
+    padding: 6px 8px;
+    margin: 0;
     border-radius: 4px;
-    transition: background-color 0.2s;
+    transition: background-color 0.2s, border-color 0.2s;
+    color: #333;
   }
   .toolbar-button i { 
     font-style: normal; 
+    display: inline-block;
+    width: 1.2em; 
+    text-align: center;
   }
 
   .toolbar-button:hover {
     background-color: #e0e0e0;
+    border-color: #ccc;
   }
 
   .toolbar-button.active {
     background-color: #d0d0d0;
+    border-color: #bbb;
+    color: #000;
   }
 
   #editor-container {
@@ -621,28 +732,46 @@
     padding: 20px;
     outline: none;
     resize: none;
-    font-size: 1.2em;
-    letter-spacing: 0.05em;
-    white-space: pre-wrap; 
+    font-size: 1.2em; 
+    line-height: 1.6; 
+    letter-spacing: 0.03em;
+    white-space: pre-wrap; /* This is crucial for line breaks */
     overflow-y: auto; 
     caret-color: transparent; 
-    line-height: 1.6;
+    -webkit-tap-highlight-color: transparent;
   }
+  :global(#editor p) {
+    margin-bottom: 0.75em; 
+  }
+  :global(#editor ul), :global(#editor ol) {
+     padding-left: 30px; 
+     margin-bottom: 0.75em;
+  }
+   :global(#editor li) {
+     padding-left: 5px;
+     margin-bottom: 0.25em;
+  }
+
 
   #auto-complete {
     position: absolute;
     background-color: #fff;
-    border: 1px solid #ddd;
+    border: 1px solid #ccc;
     border-radius: 4px;
-    padding: 5px;
+    padding: 6px 8px;
     font-size: 1em;
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
     display: none;
     z-index: 20; 
+    color: #2c3e50;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   :global(#editor::selection) {
-    background: rgba(0, 0, 255, 0.3);
+    background: rgba(100, 149, 237, 0.4); 
   }
 
   #custom-cursor {
@@ -653,7 +782,7 @@
     z-index: 10;
     user-select: none; 
     -webkit-user-select: none; 
-    transition: top 0.05s ease-out, left 0.05s ease-out; 
-    height: 1.2em; 
+    transition: top 0.05s ease-out, left 0.05s ease-out; /* Restored for smoothness */
+    height: 1.2em; /* Rely on CSS for height, relative to editor's font-size if inherited */
   }
 </style>
